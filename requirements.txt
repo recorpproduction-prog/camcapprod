@@ -10,8 +10,9 @@ requests>=2.31.0  # For online OCR APIs
 # Optional: Local Tesseract (only needed if using 'local' OCR provider)
 # pytesseract>=0.3.10
 
-# Google Sheets integration
+# Google Sheets & Drive integration
 gspread>=5.12.0
+google-api-python-client>=2.100.0
 google-auth>=2.23.0
 google-auth-oauthlib>=1.1.0
 google-auth-httplib2>=0.1.1

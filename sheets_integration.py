@@ -125,11 +125,7 @@ class SheetsIntegration:
             row_data = []
             for col in COLUMNS:
                 value = record.get(col, '')
-                # Handle image path - we'll store as note for now
-                if col == 'image_drive_url':
-                    # Could upload to Drive and get URL, for now just note
-                    value = f"Local: {record.get('image_path', 'N/A')}"
-                row_data.append(str(value))
+                row_data.append(str(value) if value is not None else '')
             
             # Append row
             sheet.append_row(row_data)

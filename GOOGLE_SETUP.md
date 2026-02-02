@@ -79,6 +79,28 @@ This lets your Pallet Ticket Capture app read and write to a Google Sheet.
 
 ---
 
+## Step 6b (Optional): Drive folder for images
+
+Images are uploaded to Google Drive in date-named folders (YYYY-MM-DD, 7am–7am day blocks).
+
+**Option A – Use default (no extra setup)**  
+Images go to the service account’s Drive. They are viewable via links stored in the Sheet.
+
+**Option B – Use a folder in your Drive**
+
+1. In [drive.google.com](https://drive.google.com), create a folder (e.g. "Pallet Ticket Captures")
+2. Click the folder → **Share**
+3. Add the **service account email** (from `credentials.json` → `"client_email"`) as **Editor**
+4. Copy the **Folder ID** from the URL:  
+   `https://drive.google.com/drive/folders/FOLDER_ID_HERE`  
+5. Add to your app:  
+   `GOOGLE_DRIVE_ROOT_FOLDER_ID` = `FOLDER_ID_HERE`  
+   (Render: Environment → add this variable)
+
+Date subfolders (e.g. 2025-01-31) will be created inside this folder, with images viewable on the site.
+
+---
+
 ## Step 7: Use the credentials in your app
 
 **For local use:**

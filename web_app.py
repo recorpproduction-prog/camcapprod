@@ -19,6 +19,15 @@ import numpy as np
 from ocr_processor import OCRProcessor
 from sheets_integration import SheetsIntegration
 from data_parser import DataParser
+try:
+    from drive_integration import upload_to_drive, get_date_folder_name
+    _DRIVE_AVAILABLE = True
+except ImportError as e:
+    _DRIVE_AVAILABLE = False
+    def upload_to_drive(*a, **kw):
+        return None, str(e)
+    def get_date_folder_name():
+        return datetime.now().strftime('%Y-%m-%d')
 
 # Use paths relative to this file so templates are found on Render
 _BASE = Path(__file__).resolve().parent
@@ -50,6 +59,7 @@ CONFIG = {
     'sheets_id': os.getenv('GOOGLE_SHEET_ID'),
     'credentials_file': os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json'),
     'credentials_json': os.getenv('GOOGLE_CREDENTIALS_JSON'),  # Alt: paste JSON as env var
+    'drive_root_folder_id': os.getenv('GOOGLE_DRIVE_ROOT_FOLDER_ID'),  # Optional: date folders created inside this
 }
 
 # Initialize components
@@ -236,12 +246,37 @@ def submit_ticket():
         parsed_data = parser.parse(ocr_text)
         print(f"[OK] Parsed {len(parsed_data['parsed'])} fields")
         
-        # Create record
+        # Upload to Google Drive (date folder YYYY-MM-DD, 7am-7am blocks)
+        image_drive_url = None
+        creds_available = (
+            (CONFIG.get('credentials_json') and CONFIG['credentials_json'].strip()) or
+            (CONFIG.get('credentials_file') and os.path.exists(CONFIG.get('credentials_file', '')))
+        )
+        if creds_available:
+            try:
+                drive_url, drive_err = upload_to_drive(
+                    str(image_path),
+                    filename,
+                    root_folder_id=CONFIG.get('drive_root_folder_id'),
+                    credentials_file=CONFIG.get('credentials_file'),
+                    credentials_json=CONFIG.get('credentials_json')
+                )
+                if drive_url:
+                    image_drive_url = drive_url
+                    print(f"[OK] Uploaded to Drive folder {get_date_folder_name()}")
+                elif drive_err:
+                    print(f"[WARN] Drive upload skipped: {drive_err}")
+            except Exception as e:
+                print(f"[WARN] Drive upload error: {e}")
+
+        # Create record - use Drive URL for display when available
+        display_url = image_drive_url or f'/captured_images/{filename}'
         record = {
             'timestamp': timestamp.isoformat(),
             'status': 'PENDING',
             'operator': 'Web-User',
-            'image_path': f'/captured_images/{filename}',  # Updated to .jpg
+            'image_path': display_url,
+            'image_drive_url': image_drive_url or '',
             'raw_ocr_text': ocr_text,
             **parsed_data['parsed']
         }
@@ -332,6 +367,11 @@ def get_pending():
                                 records.append(record)
                 except:
                     pass
+
+        # Ensure image_path is set for display (prefer Drive URL)
+        for r in records:
+            if not r.get('image_path') and r.get('image_drive_url'):
+                r['image_path'] = r['image_drive_url']
         
         return jsonify({'records': records})
     except Exception as e:
