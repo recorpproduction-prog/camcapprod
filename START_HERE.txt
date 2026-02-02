@@ -1,0 +1,56 @@
+================================================================================
+    PALLET TICKET CAPTURE - DESKTOP APPLICATION
+================================================================================
+
+🚀 ONE-CLICK START:
+
+Windows Users:
+    → Double-click: start_app.bat
+
+Mac/Linux Users:
+    → Double-click or run: ./start_app.sh
+    → (First time: chmod +x start_app.sh)
+
+================================================================================
+
+WHAT THE LAUNCHER DOES:
+    ✓ Checks Python installation
+    ✓ Installs missing dependencies automatically
+    ✓ Verifies Tesseract OCR
+    ✓ Starts the application
+
+================================================================================
+
+FIRST TIME SETUP:
+
+1. Install Python 3.8+ from: https://www.python.org/downloads/
+   → IMPORTANT: Check "Add Python to PATH" during installation
+
+2. (Optional) Install Tesseract OCR for better results:
+   Windows: https://github.com/UB-Mannheim/tesseract/wiki
+   Mac: brew install tesseract
+   Linux: sudo apt-get install tesseract-ocr
+
+3. Double-click start_app.bat (Windows) or start_app.sh (Mac/Linux)
+
+================================================================================
+
+CONFIGURE GOOGLE SHEETS (Optional):
+
+The app works without Google Sheets (saves locally), but for supervisor review:
+
+1. See DESKTOP_SETUP.md for Google Service Account setup
+2. Create config.json with your Sheet ID and credentials
+3. The app will connect automatically
+
+================================================================================
+
+QUICK HELP:
+
+- For detailed setup: See DESKTOP_SETUP.md
+- For troubleshooting: See QUICK_START.md
+- Manual launch: python launcher.py or python app.py
+
+================================================================================
+
+

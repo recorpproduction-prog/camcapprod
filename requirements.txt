@@ -1,0 +1,32 @@
+# Pallet Ticket Capture - Desktop Application
+# Python dependencies
+
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+requests>=2.31.0  # For online OCR APIs
+
+# Optional: Local Tesseract (only needed if using 'local' OCR provider)
+# pytesseract>=0.3.10
+
+# Google Sheets integration
+gspread>=5.12.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+
+# GUI
+# Note: tkinter is included with Python standard library and cannot be installed via pip
+# If tkinter import fails:
+#   Windows: Reinstall Python and ensure 'tcl/tk' option is selected
+#   Linux: Install python3-tk: sudo apt-get install python3-tk
+#   Mac: Should be included by default
+
+# Review server
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Optional: For better image processing
+scikit-image>=0.21.0
+

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pallet Ticket Capture</title>
+  <base target="_top">
+  <style>
+  <?!= include('styles.css'); ?>
+  
+  /* Page-specific styles */
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    
+    #camera-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+    
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    #status-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 15px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: bold;
+      z-index: 1000;
+      backdrop-filter: blur(10px);
+      transition: background 0.3s;
+    }
+    
+    #status-banner.scanning {
+      background: rgba(0, 100, 200, 0.8);
+    }
+    
+    #status-banner.detecting {
+      background: rgba(255, 165, 0, 0.8);
+    }
+    
+    #status-banner.processing {
+      background: rgba(0, 150, 0, 0.8);
+    }
+    
+    #status-banner.success {
+      background: rgba(0, 200, 0, 0.9);
+    }
+    
+    #status-banner.error {
+      background: rgba(200, 0, 0, 0.8);
+    }
+    
+    #detection-overlay {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      max-width: 400px;
+      border: 3px solid #00ff00;
+      border-radius: 10px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    }
+    
+    #detection-overlay.active {
+      opacity: 1;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+    
+    #detection-overlay.active {
+      animation: pulse 1s infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-banner" class="scanning">
+    Scanning for pallet ticket...
+  </div>
+  
+  <div id="camera-container">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display: none;"></canvas>
+  </div>
+  
+  <div id="detection-overlay"></div>
+  
+  <script>
+  <?!= include('app.js'); ?>
+  </script>
+</body>
+</html>
+

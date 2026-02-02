@@ -1,0 +1,39 @@
+================================================================================
+    ONE-CLICK START - WEB APPLICATION
+================================================================================
+
+🚀 TO START THE WEB APP:
+
+Windows:
+    → Double-click: start_web.bat
+
+Mac/Linux:
+    → Run: ./start_web.sh
+    → (First time: chmod +x start_web.sh)
+
+================================================================================
+
+WHAT IT DOES:
+    ✓ Checks Python installation
+    ✓ Installs missing dependencies automatically
+    ✓ Starts the web server
+    ✓ Opens automatically on http://localhost:5000
+
+================================================================================
+
+AFTER STARTING:
+    1. Open browser: http://localhost:5000
+    2. Select camera from dropdown
+    3. Click "START CAMERA"
+    4. Allow camera permissions
+    5. Start capturing tickets!
+
+================================================================================
+
+DEPLOYMENT:
+    See WEB_SETUP.md for online deployment instructions
+    Recommended: PythonAnywhere (FREE, easy)
+
+================================================================================
+
+

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pallet Ticket Review</title>
+  <base target="_top">
+  <style>
+  <?!= include('styles.css'); ?>
+  
+  /* Page-specific styles */
+    body {
+      padding: 10px;
+      background: #f5f5f5;
+    }
+    
+    .header {
+      background: #fff;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 {
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .filter-bar select, .filter-bar button {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .records-table {
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 15px;
+    }
+    
+    .table-row {
+      display: grid;
+      grid-template-columns: auto 1fr 1fr 1fr auto;
+      gap: 10px;
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.2s;
+      align-items: center;
+    }
+    
+    .table-row:hover {
+      background: #f9f9f9;
+    }
+    
+    .table-row.header-row {
+      font-weight: bold;
+      background: #f0f0f0;
+      cursor: default;
+    }
+    
+    .thumbnail {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+    
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      display: inline-block;
+    }
+    
+    .status-pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+    
+    .status-approved {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .status-rejected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    
+    .review-panel {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      display: none;
+      overflow-y: auto;
+    }
+    
+    .review-panel.active {
+      display: block;
+    }
+    
+    .review-content {
+      background: #fff;
+      margin: 20px auto;
+      max-width: 800px;
+      border-radius: 8px;
+      padding: 20px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    
+    .review-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #eee;
+    }
+    
+    .review-header h2 {
+      margin: 0;
+    }
+    
+    .close-btn {
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .review-image {
+      width: 100%;
+      max-width: 600px;
+      margin: 20px auto;
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    .review-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    
+    .field-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .field-label {
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #555;
+      font-size: 14px;
+    }
+    
+    .field-value {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f9f9f9;
+    }
+    
+    .field-value.high-confidence {
+      border-color: #28a745;
+    }
+    
+    .field-value.medium-confidence {
+      border-color: #ffc107;
+    }
+    
+    .field-value.low-confidence {
+      border-color: #dc3545;
+    }
+    
+    .ocr-section {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+    
+    .ocr-text {
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .review-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 2px solid #eee;
+    }
+    
+    .btn-approve {
+      flex: 1;
+      background: #28a745;
+      color: #fff;
+      border: none;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .btn-reject {
+      flex: 1;
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .reject-reason {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-top: 10px;
+      display: none;
+    }
+    
+    .reject-reason.active {
+      display: block;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Pallet Ticket Review</h1>
+    <div class="filter-bar">
+      <select id="statusFilter">
+        <option value="PENDING" selected>Pending</option>
+        <option value="">All Status</option>
+        <option value="APPROVED">Approved</option>
+        <option value="REJECTED">Rejected</option>
+      </select>
+      <button onclick="loadRecords()">Refresh</button>
+      <span id="autoRefreshStatus" style="margin-left: auto; color: #666; font-size: 12px;"></span>
+    </div>
+  </div>
+  
+  <div class="records-table" id="recordsTable">
+    <div class="table-row header-row">
+      <div>Image</div>
+      <div>Timestamp</div>
+      <div>Pallet ID</div>
+      <div>Product</div>
+      <div>Status</div>
+    </div>
+    <div id="recordsBody">
+      <div class="empty-state">Loading...</div>
+    </div>
+  </div>
+  
+  <div class="review-panel" id="reviewPanel">
+    <div class="review-content">
+      <div class="review-header">
+        <h2>Review Pallet Ticket</h2>
+        <button class="close-btn" onclick="closeReviewPanel()">Close</button>
+      </div>
+      <div id="reviewContent">
+        <!-- Review content will be inserted here -->
+      </div>
+    </div>
+  </div>
+  
+  <script>
+  <?!= include('review.js'); ?>
+  </script>
+</body>
+</html>
+
