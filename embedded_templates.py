@@ -1,0 +1,162 @@
+"""
+Embedded HTML templates - used when templates/ folder is not deployed (e.g. Render).
+Ensures the app works even without the templates folder in the repo.
+"""
+
+CAPTURE_HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pallet Ticket Capture</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
+        .header { background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 25px; text-align: center; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header h1 { font-size: 28px; margin-bottom: 10px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .section { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .camera-select { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
+        .camera-select label { font-weight: bold; display: block; margin-bottom: 8px; color: #333; }
+        .camera-select select { width: 100%; padding: 10px; font-size: 16px; border: 2px solid #ddd; border-radius: 6px; background: white; }
+        .camera-frame { position: relative; width: 100%; max-width: 360px; min-height: 400px; margin: 0 auto 20px; border: 4px solid #333; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.3); background: #000; aspect-ratio: 3/4; }
+        .camera-frame.capture-good { border-color: #4CAF50; box-shadow: 0 0 30px rgba(76, 175, 80, 0.6); animation: captureFlash 0.5s ease; }
+        @keyframes captureFlash { 0% { box-shadow: 0 0 40px rgba(76, 175, 80, 0.9); } 100% { box-shadow: 0 8px 24px rgba(0,0,0,0.3); } }
+        .camera-frame video, .camera-frame #videoPlaceholder { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        #video { background: #000; display: none; }
+        #videoPlaceholder { width: 100%; height: 100%; min-height: 400px; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; text-align: center; padding: 20px; }
+        .countdown-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; font-size: 120px; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(0,0,0,0.8); z-index: 10; }
+        .countdown-overlay.active { display: flex; }
+        .countdown-overlay.green { background: rgba(76, 175, 80, 0.85); font-size: 80px; }
+        .camera-status { position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 16px; background: rgba(0,0,0,0.75); color: white; font-size: 14px; font-weight: 600; text-align: center; z-index: 5; }
+        .camera-status.ready { background: rgba(33, 150, 243, 0.9); }
+        .camera-status.processing { background: rgba(245, 124, 0, 0.9); }
+        .camera-status.success { background: rgba(56, 142, 60, 0.9); }
+        .camera-status.error { background: rgba(211, 47, 47, 0.9); }
+        #canvas { display: none; }
+        .status { text-align: center; padding: 15px; margin: 20px 0; border-radius: 8px; font-weight: bold; font-size: 16px; }
+        .status.ready { background: #E3F2FD; color: #1976D2; }
+        .status.processing { background: #FFF3E0; color: #F57C00; }
+        .status.success { background: #E8F5E9; color: #388E3C; }
+        .status.error { background: #FFEBEE; color: #D32F2F; }
+        .controls { text-align: center; padding: 20px; }
+        button { padding: 15px 30px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin: 10px; transition: all 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        button:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        .btn-start { background: #4CAF50; color: white; font-size: 20px; padding: 18px 40px; }
+        .btn-stop { background: #f44336; color: white; }
+        .btn-secondary { background: #2196F3; color: white; }
+        .btn-test { background: #9E9E9E; color: white; font-size: 14px; }
+        .btn-test.test-mode-on { background: #FF9800; font-weight: bold; }
+        .error-box { background: #FFEBEE; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f44336; display: none; }
+        .info { background: #E3F2FD; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3; }
+        .label-data { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .label-data h3 { margin-bottom: 15px; color: #333; border-bottom: 2px solid #2196F3; padding-bottom: 10px; }
+        .label-data-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+        .label-data-item { display: flex; flex-direction: column; padding: 10px 12px; background: #f9f9f9; border-radius: 6px; border-left: 3px solid #2196F3; }
+        .label-data-item .field-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .label-data-item .field-value { font-size: 15px; font-weight: 600; color: #333; }
+        .label-data-empty { color: #999; font-style: italic; padding: 20px; }
+        .raw-ocr { margin-top: 15px; padding: 12px; background: #f5f5f5; border-radius: 6px; border: 1px solid #ddd; }
+        .raw-ocr summary { cursor: pointer; font-weight: bold; color: #666; }
+        .raw-ocr pre { margin-top: 10px; font-size: 12px; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="header"><h1>Pallet Ticket Capture</h1><p>Automated capture and OCR processing</p></div>
+    <div class="container">
+        <div class="info"><h3>Instructions:</h3><p>1. Select camera 2. Click START CAMERA 3. Allow camera access 4. Move label into frame, hold steady for countdown, remove label after capture</p></div>
+        <div class="error-box" id="errorBox"></div>
+        <div class="controls">
+            <button id="startBtn" class="btn-start" onclick="startCamera()">START CAMERA</button>
+            <button id="stopBtn" class="btn-stop" onclick="stopCamera()" style="display:none;">STOP CAMERA</button>
+            <button class="btn-secondary" onclick="window.open('/review','_blank')">Review Page</button>
+            <button id="testModeBtn" class="btn-test" onclick="toggleTestMode()">Test Mode: OFF</button>
+        </div>
+        <div class="section">
+            <div class="camera-select"><label>Camera:</label><select id="cameraSelect"><option value="">Loading...</option></select></div>
+            <div class="camera-frame" id="cameraFrame">
+                <video id="video" autoplay playsinline></video>
+                <div id="videoPlaceholder">Camera not started. Click START CAMERA to begin</div>
+                <div class="countdown-overlay" id="countdownOverlay"></div>
+                <div class="camera-status ready" id="cameraStatus">Ready</div>
+            </div>
+            <canvas id="canvas"></canvas>
+        </div>
+        <div class="label-data"><h3>Label Data</h3><div id="labelDataList" class="label-data-empty">No data yet</div><details class="raw-ocr"><summary>Raw OCR</summary><pre id="rawOcrText">Nothing yet</pre></details></div>
+        <div id="status" class="status ready" style="display:none;"></div>
+    </div>
+    <script>
+    var video,canvas,stream,isRunning=false,isProcessing=false,availableCameras=[],captureState='ready',stableFrameCount=0,exitFrameCount=0,prevFramePixels=null,testMode=false;
+    var SHARPNESS_THRESHOLD=50,STABLE_FRAMES_NEEDED=5,EXIT_FRAMES_NEEDED=6,MOTION_THRESHOLD=15;
+    window.addEventListener('DOMContentLoaded',function(){video=document.getElementById('video');canvas=document.getElementById('canvas');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Camera not supported');return;}navigator.mediaDevices.enumerateDevices().then(function(d){var v=d.filter(function(x){return x.kind==='videoinput';});var s=document.getElementById('cameraSelect');s.innerHTML='';v.forEach(function(dev,i){var o=document.createElement('option');o.value=dev.deviceId;o.textContent=dev.label||'Camera '+(i+1);s.appendChild(o);});});testMode=localStorage.getItem('palletTestMode')==='true';updateTestModeBtn();});
+    function toggleTestMode(){testMode=!testMode;localStorage.setItem('palletTestMode',testMode);updateTestModeBtn();}
+    function updateTestModeBtn(){var b=document.getElementById('testModeBtn');if(b){b.textContent=testMode?'Test Mode: ON':'Test Mode: OFF';b.classList.toggle('test-mode-on',testMode);}}
+    function updateStatus(t,m){var s=document.getElementById('status');s.className='status '+t;s.textContent=m;var c=document.getElementById('cameraStatus');if(c){c.className='camera-status '+t;c.textContent=m;}}
+    function startCamera(){var sel=document.getElementById('cameraSelect');var cid=sel.value;var c={video:{width:{ideal:720},height:{ideal:960},aspectRatio:{ideal:3/4}}};if(cid)c.video.deviceId={exact:cid};navigator.mediaDevices.getUserMedia(c).then(function(s){stream=s;video.srcObject=s;video.onloadedmetadata=function(){video.play().then(function(){document.getElementById('videoPlaceholder').style.display='none';video.style.display='block';document.getElementById('startBtn').style.display='none';document.getElementById('stopBtn').style.display='inline-block';isRunning=true;updateStatus('ready','Ready - move label into view');startFrameSampling();});};}).catch(function(e){alert('Camera error: '+e.message);});}
+    function stopCamera(){isRunning=false;captureState='ready';if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}video.srcObject=null;video.style.display='none';document.getElementById('videoPlaceholder').style.display='flex';document.getElementById('startBtn').style.display='inline-block';document.getElementById('stopBtn').style.display='none';}
+    function startFrameSampling(){if(!isRunning)return;try{canvas.width=video.videoWidth;canvas.height=video.videoHeight;var ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(video,0,0);analyzeFrame();}catch(e){}setTimeout(startFrameSampling,400);}
+    function getPixels(id){var d=id.data,w=id.width,h=id.height,p=[],step=12;for(var y=0;y<h;y+=step)for(var x=0;x<w;x+=step){var i=(y*w+x)*4;p.push((d[i]+d[i+1]+d[i+2])/3);}return p;}
+    function motion(id,prev){if(!prev)return 999;var c=getPixels(id);if(c.length!==prev.length)return 999;var s=0;for(var i=0;i<c.length;i++)s+=Math.abs(c[i]-prev[i]);return s/c.length;}
+    function sharpness(id){var d=id.data,w=id.width,h=id.height,v=0,m=0,n=0;for(var y=1;y<h-1;y+=10)for(var x=1;x<w-1;x+=10){var idx=(y*w+x)*4;var g=(d[idx]+d[idx+1]+d[idx+2])/3;var ni=(y*w+(x+1))*4;var ng=(d[ni]+d[ni+1]+d[ni+2])/3;m+=Math.abs(g-ng);n++;}if(n===0)return 0;m/=n;for(var y=1;y<h-1;y+=10)for(var x=1;x<w-1;x+=10){var idx=(y*w+x)*4;var g=(d[idx]+d[idx+1]+d[idx+2])/3;var ni=(y*w+(x+1))*4;var ng=(d[ni]+d[ni+1]+d[ni+2])/3;v+=Math.pow(Math.abs(g-ng)-m,2);}return v/n;}
+    function analyzeFrame(){if(isProcessing||!isRunning)return;try{var ctx=canvas.getContext('2d',{willReadFrequently:true});var id=ctx.getImageData(0,0,canvas.width,canvas.height);var sh=sharpness(id);if(captureState==='capturing'||captureState==='countdown')return;if(captureState==='wait_exit'){if(sh<SHARPNESS_THRESHOLD*0.7){exitFrameCount++;if(exitFrameCount>=EXIT_FRAMES_NEEDED){captureState='ready';exitFrameCount=0;prevFramePixels=null;updateStatus('ready','Ready for next label');}}else exitFrameCount=0;return;}if(captureState==='ready'){prevFramePixels=getPixels(id);if(sh>SHARPNESS_THRESHOLD){captureState='label_in_view';stableFrameCount=0;updateStatus('processing','Hold steady...');}return;}if(captureState==='label_in_view'||captureState==='checking'){if(sh<SHARPNESS_THRESHOLD){captureState='ready';stableFrameCount=0;prevFramePixels=null;return;}var mot=motion(id,prevFramePixels);prevFramePixels=getPixels(id);if(mot<MOTION_THRESHOLD){stableFrameCount++;captureState='checking';if(stableFrameCount>=STABLE_FRAMES_NEEDED){captureState='countdown';captureWithCountdown();}}else{stableFrameCount=0;updateStatus('processing','Hold steady...');}}}catch(e){}}
+    function captureWithCountdown(){if(isProcessing)return;isProcessing=true;captureState='capturing';var frame=document.getElementById('cameraFrame'),overlay=document.getElementById('countdownOverlay');if(stream)stream.getTracks().forEach(function(t){t.enabled=false;});var fc=document.createElement('canvas');fc.width=canvas.width;fc.height=canvas.height;fc.getContext('2d').drawImage(canvas,0,0);var v=document.getElementById('video'),ph=document.getElementById('videoPlaceholder');ph.style.backgroundImage='url('+fc.toDataURL('image/jpeg')+')';ph.style.backgroundSize='cover';ph.style.display='flex';ph.innerHTML='';var doCap=function(){overlay.classList.add('green');overlay.textContent='OK';updateStatus('processing','Processing...');setTimeout(function(){overlay.classList.remove('active','green');overlay.textContent='';if(stream)stream.getTracks().forEach(function(t){t.enabled=true;});v.style.display='block';ph.style.backgroundImage='';ph.style.display='none';captureState='wait_exit';exitFrameCount=0;updateStatus('success','Captured! Remove label');var w=fc.width,h=fc.height,m=800;if(w>m||h>m){var sc=m/Math.max(w,h);w=Math.round(w*sc);h=Math.round(h*sc);}var cc=document.createElement('canvas');cc.width=w;cc.height=h;cc.getContext('2d').drawImage(fc,0,0,w,h);submitTicket(cc.toDataURL('image/jpeg',0.7));},500);};overlay.classList.add('active');overlay.classList.remove('green');var cd=function(n){if(n>0){overlay.textContent=n;updateStatus('processing','Hold... '+n);setTimeout(function(){cd(n-1);},1000);}else{frame.classList.add('capture-good');doCap();}};cd(3);}
+    function submitTicket(img){updateStatus('processing','Running OCR...');fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:img,test_mode:testMode})}).then(function(r){return r.json().then(function(d){return{ok:r.ok,status:r.status,data:d};});}).then(function(_){var d=_.data;if(d.duplicate){if(d.record)displayData(d.record);updateStatus('error','Duplicate - use Test Mode');captureState='ready';isProcessing=false;return;}if(d.success){if(d.record)displayData(d.record);updateStatus('success','Submitted!');isProcessing=false;}else{throw new Error(d.message||d.error||'Failed');}}).catch(function(e){updateStatus('error','Error: '+e.message);captureState='ready';isProcessing=false;});}
+    function displayData(r){var f=[{k:'sscc',l:'SSCC'},{k:'item_number',l:'Item No'},{k:'item_description',l:'Description'},{k:'batch_no',l:'Batch'},{k:'quantity',l:'Qty'},{k:'date',l:'Date'},{k:'time',l:'Time'},{k:'handwritten_number',l:'Handwritten'}],c=document.getElementById('labelDataList'),h='',has=0;f.forEach(function(x){var v=r[x.k];if(v){has=1;h+='<div class="label-data-item"><span class="field-label">'+x.l+'</span><span class="field-value">'+String(v).replace(/</g,'&lt;')+'</span></div>';}});c.className=has?'label-data-list':'label-data-empty';c.innerHTML=has?h:'No fields detected';document.getElementById('rawOcrText').textContent=r.raw_ocr_text||'(none)';}
+    </script>
+</body>
+</html>'''
+
+REVIEW_HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pallet Ticket Review</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:20px;}
+        .header{background:linear-gradient(135deg,#4CAF50 0%,#388E3C 100%);color:white;padding:25px;border-radius:10px;margin-bottom:20px;}
+        .records-table{background:white;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin-bottom:20px;}
+        .table-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr auto;gap:15px;padding:15px;border-bottom:1px solid #eee;cursor:pointer;align-items:center;}
+        .table-row:hover{background:#f9f9f9;}
+        .table-row.header-row{font-weight:bold;background:#f0f0f0;cursor:default;}
+        .thumbnail{width:80px;height:80px;object-fit:cover;border-radius:6px;}
+        .status-badge{padding:6px 12px;border-radius:6px;font-size:12px;font-weight:bold;}
+        .status-pending{background:#fff3cd;color:#856404;}
+        .status-approved{background:#d4edda;color:#155724;}
+        .status-rejected{background:#f8d7da;color:#721c24;}
+        .review-panel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:1000;display:none;overflow-y:auto;padding:20px;}
+        .review-panel.active{display:block;}
+        .review-content{background:white;margin:20px auto;max-width:900px;border-radius:10px;padding:30px;box-shadow:0 8px 24px rgba(0,0,0,0.3);}
+        .review-image{width:100%;max-width:700px;margin:20px auto;display:block;border-radius:8px;}
+        .review-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:15px;margin:20px 0;}
+        .field-group{display:flex;flex-direction:column;}
+        .field-label{font-weight:bold;margin-bottom:5px;color:#555;}
+        .field-value{padding:10px;border:2px solid #ddd;border-radius:6px;background:#f9f9f9;}
+        .review-actions{display:flex;gap:15px;margin-top:25px;padding-top:25px;border-top:2px solid #eee;}
+        .btn-approve,.btn-reject{flex:1;padding:15px;border:none;border-radius:8px;font-size:18px;font-weight:bold;cursor:pointer;color:white;}
+        .btn-approve{background:#4CAF50;}
+        .btn-reject{background:#f44336;}
+        .empty-state{text-align:center;padding:60px 20px;color:#999;font-size:18px;}
+    </style>
+</head>
+<body>
+    <div class="header"><h1>Pallet Ticket Review</h1><button onclick="loadRecords()" style="margin-top:10px;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;">Refresh</button><span id="statusMsg" style="margin-left:15px;color:rgba(255,255,255,0.9);"></span></div>
+    <div class="records-table">
+        <div class="table-row header-row"><div>Image</div><div>Timestamp</div><div>Item No</div><div>Description</div><div>Status</div></div>
+        <div id="recordsBody"><div class="empty-state">Loading...</div></div>
+    </div>
+    <div class="review-panel" id="reviewPanel"><div class="review-content"><div id="reviewContent"></div></div></div>
+    <script>
+    var records=[],currentRecord=null;
+    window.addEventListener('DOMContentLoaded',loadRecords);
+    function loadRecords(){fetch('/api/pending').then(function(r){return r.json();}).then(function(d){records=d.records||[];document.getElementById('statusFilter')&&(records=records.filter(function(r){return r.status===(document.getElementById('statusFilter').value||'PENDING');}));displayRecords(records);document.getElementById('statusMsg').textContent=records.length+' records';}).catch(function(){document.getElementById('statusMsg').textContent='Error loading';});}
+    function displayRecords(recs){var t=document.getElementById('recordsBody');if(!recs.length){t.innerHTML='<div class="empty-state">No records</div>';return;}t.innerHTML=recs.map(function(r,i){var ts=r.timestamp?new Date(r.timestamp).toLocaleString():'N/A',item=r.sscc||r.item_number||'N/A',desc=r.item_description||'N/A',st=r.status||'PENDING',img=r.image_path?'<img src="'+r.image_path+'" class="thumbnail" onerror="this.style.display=\'none\'">':'<div class="thumbnail" style="background:#ddd;display:flex;align-items:center;justify-content:center;color:#999;">No Image</div>';return'<div class="table-row" onclick="openReview('+i+')">'+'<div>'+img+'</div><div>'+ts+'</div><div>'+item+'</div><div>'+desc+'</div><div><span class="status-badge status-'+st.toLowerCase()+'">'+st+'</span></div></div>';}).join('');}
+    function openReview(i){currentRecord=records[i];var p=document.getElementById('reviewPanel'),c=document.getElementById('reviewContent');var img=currentRecord.image_path?'<img src="'+currentRecord.image_path+'" class="review-image">':'<p>No image</p>';var fields=[['SSCC',currentRecord.sscc],['Item Number',currentRecord.item_number],['Description',currentRecord.item_description],['Batch',currentRecord.batch_no],['Quantity',currentRecord.quantity],['Date',currentRecord.date],['Time',currentRecord.time],['Handwritten',currentRecord.handwritten_number]];var fhtml=fields.map(function(x){return'<div class="field-group"><div class="field-label">'+x[0]+'</div><div class="field-value">'+(x[1]||'N/A')+'</div></div>';}).join('');c.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:20px;"><h2>Review</h2><button onclick="closeReview()" style="padding:10px 20px;background:#f44336;color:white;border:none;border-radius:6px;cursor:pointer;">Close</button></div>'+img+'<div class="review-fields">'+fhtml+'</div><div style="margin:20px 0;padding:15px;background:#f9f9f9;border-radius:6px;"><h3>Raw OCR</h3><pre style="white-space:pre-wrap;font-size:12px;max-height:200px;overflow-y:auto;">'+(currentRecord.raw_ocr_text||'')+'</pre></div><div class="review-actions"><button class="btn-approve" onclick="approveRecord()">APPROVE</button><button class="btn-reject" onclick="showReject()">REJECT</button></div><textarea id="rejectReason" placeholder="Reason..." style="width:100%;padding:10px;margin-top:10px;display:none;border:2px solid #ddd;border-radius:6px;"></textarea><button id="confirmReject" class="btn-reject" style="display:none;margin-top:10px;width:100%;" onclick="confirmReject()">Confirm Reject</button>';p.classList.add('active');}
+    function closeReview(){document.getElementById('reviewPanel').classList.remove('active');currentRecord=null;}
+    function showReject(){document.getElementById('rejectReason').style.display='block';document.getElementById('confirmReject').style.display='block';}
+    function approveRecord(){if(!currentRecord||!currentRecord._rowNumber){alert('Row number not available');return;}fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row_number:currentRecord._rowNumber})}).then(function(r){return r.json();}).then(function(d){if(d.success){alert('Approved!');closeReview();loadRecords();}else alert('Error: '+d.error);}).catch(function(e){alert('Error: '+e.message);});}
+    function confirmReject(){var reason=document.getElementById('rejectReason').value.trim();if(!reason){alert('Enter reason');return;}if(!currentRecord||!currentRecord._rowNumber){alert('Row number not available');return;}fetch('/api/reject',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row_number:currentRecord._rowNumber,reason:reason})}).then(function(r){return r.json();}).then(function(d){if(d.success){alert('Rejected!');closeReview();loadRecords();}else alert('Error: '+d.error);}).catch(function(e){alert('Error: '+e.message);});}
+    </script>
+</body>
+</html>'''

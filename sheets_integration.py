@@ -164,17 +164,24 @@ class SheetsIntegration:
             return False
     
     def get_pending_records(self):
-        """Get all pending records"""
+        """Get all pending records with _rowNumber for approve/reject"""
         try:
             if not self.spreadsheet:
                 return []
             
             sheet = self.get_or_create_sheet('PENDING_REVIEW')
-            all_records = sheet.get_all_records()
+            all_values = sheet.get_all_values()
+            if len(all_values) < 2:
+                return []
             
-            # Filter for pending status
-            pending = [r for r in all_records if str(r.get('status', '')).upper() == 'PENDING']
-            
+            header = all_values[0]
+            pending = []
+            for i in range(1, len(all_values)):
+                row = all_values[i]
+                record = dict(zip(header, row + [''] * (len(header) - len(row))))
+                if str(record.get('status', '')).upper() == 'PENDING':
+                    record['_rowNumber'] = i + 1  # 1-based row in sheet
+                    pending.append(record)
             return pending
             
         except Exception as e:

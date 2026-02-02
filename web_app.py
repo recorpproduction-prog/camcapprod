@@ -3,8 +3,9 @@ Pallet Ticket Capture - Web Application
 Complete rewrite for online deployment
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, render_template_string, request, jsonify, send_from_directory
 from flask_cors import CORS
+from jinja2 import TemplateNotFound
 import os
 import json
 import base64
@@ -19,12 +20,31 @@ from ocr_processor import OCRProcessor
 from sheets_integration import SheetsIntegration
 from data_parser import DataParser
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+# Use paths relative to this file so templates are found on Render
+_BASE = Path(__file__).resolve().parent
+app = Flask(__name__, static_folder=str(_BASE / 'static'), template_folder=str(_BASE / 'templates'))
+
+# Embedded templates - used when templates/ folder is not deployed (e.g. missing from repo)
+try:
+    from embedded_templates import CAPTURE_HTML, REVIEW_HTML
+    _HAS_EMBEDDED = True
+except ImportError:
+    _HAS_EMBEDDED = False
 CORS(app)
+
+# Return JSON for 500 errors so we can see the actual error message
+@app.errorhandler(500)
+def handle_500(err):
+    import traceback
+    tb = traceback.format_exc()
+    msg = getattr(err, 'description', None) or str(err)
+    if os.getenv('FLASK_DEBUG', '').lower() == 'true':
+        return jsonify({'error': 'Internal Server Error', 'message': msg, 'traceback': tb}), 500
+    return jsonify({'error': 'Internal Server Error', 'message': msg}), 500
 
 # Configuration - works for local and cloud (Render, Railway, etc.)
 CONFIG = {
-    'images_folder': 'static/captured_images',
+    'images_folder': 'captured_images',  # Outside static - some hosts make static read-only
     'ocr_provider': os.getenv('OCR_PROVIDER', 'ocrspace'),
     'ocr_api_key': os.getenv('OCR_API_KEY'),
     'sheets_id': os.getenv('GOOGLE_SHEET_ID'),
@@ -131,15 +151,24 @@ def health():
     """Quick health check - use this to verify deploy"""
     return jsonify({'status': 'ok', 'ocr': ocr is not None, 'sheets': sheets is not None})
 
+def _render_page(template_name, embedded_html):
+    """Render template from file if exists, else use embedded HTML (for when templates/ not in repo)."""
+    try:
+        return render_template(template_name)
+    except TemplateNotFound:
+        if _HAS_EMBEDDED and embedded_html:
+            return render_template_string(embedded_html)
+        raise
+
 @app.route('/')
 def index():
     """Main capture page"""
-    return render_template('capture.html')
+    return _render_page('capture.html', CAPTURE_HTML if _HAS_EMBEDDED else None)
 
 @app.route('/review')
 def review():
     """Supervisor review page"""
-    return render_template('review.html')
+    return _render_page('review.html', REVIEW_HTML if _HAS_EMBEDDED else None)
 
 def check_duplicate_sscc(sscc):
     """Check if SSCC exists in Sheets or local records"""
