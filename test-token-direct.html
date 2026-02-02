@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Token Test</title>
+</head>
+<body>
+    <h1>Test Your Token Directly</h1>
+    <p>Paste your token and click test. This will show exactly what GitHub returns.</p>
+    <input type="text" id="token" placeholder="ghp_..." style="width: 500px; padding: 10px;">
+    <button onclick="test()">Test Token</button>
+    <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+    
+    <script>
+    async function test() {
+        const token = document.getElementById('token').value.trim();
+        const owner = 'recorpproduction-prog';
+        const repo = 'recorp-sops-data';
+        const resultDiv = document.getElementById('result');
+        
+        if (!token) {
+            alert('Enter token');
+            return;
+        }
+        
+        resultDiv.innerHTML = 'Testing...';
+        
+        // Test with token prefix (classic)
+        console.log('Testing with token prefix (classic)...');
+        try {
+            const response1 = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            const data1 = await response1.json();
+            
+            if (response1.ok) {
+                resultDiv.innerHTML = `
+                    <h2 style="color: green;">✅ SUCCESS with "token" prefix!</h2>
+                    <p>Repository: ${data1.full_name}</p>
+                    <p><strong>Use this format in your code: token ${token.substring(0, 10)}...</strong></p>
+                `;
+                return;
+            } else {
+                console.log('token prefix failed:', response1.status, data1);
+            }
+        } catch (e) {
+            console.error('token prefix error:', e);
+        }
+        
+        // Test with Bearer prefix (fine-grained)
+        console.log('Testing with Bearer prefix (fine-grained)...');
+        try {
+            const response2 = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            const data2 = await response2.json();
+            
+            if (response2.ok) {
+                resultDiv.innerHTML = `
+                    <h2 style="color: green;">✅ SUCCESS with "Bearer" prefix!</h2>
+                    <p>Repository: ${data2.full_name}</p>
+                    <p><strong>Use this format in your code: Bearer ${token.substring(0, 10)}...</strong></p>
+                `;
+                return;
+            } else {
+                resultDiv.innerHTML = `
+                    <h2 style="color: red;">❌ BOTH FORMATS FAILED</h2>
+                    <p><strong>Token prefix (classic):</strong> ${response1.status} - ${data1.message}</p>
+                    <p><strong>Bearer prefix (fine-grained):</strong> ${response2.status} - ${data2.message}</p>
+                    <hr>
+                    <h3>What this means:</h3>
+                    <ul>
+                        <li><strong>401:</strong> Token invalid, expired, or missing 'repo' scope</li>
+                        <li><strong>403:</strong> Token doesn't have permission</li>
+                        <li><strong>404:</strong> Repository doesn't exist</li>
+                    </ul>
+                    <p><strong>Fix:</strong> Go to <a href="https://github.com/settings/tokens" target="_blank">GitHub Tokens</a> and create a NEW token with <strong>repo</strong> scope checked.</p>
+                `;
+            }
+        } catch (e) {
+            resultDiv.innerHTML = `<h2 style="color: red;">Error: ${e.message}</h2>`;
+        }
+    }
+    </script>
+</body>
+</html>
+
+
+

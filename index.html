@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>SOP Creation Tool</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="sop-config.js?v=1"></script>
+</head>
+<body>
+    <!-- Main App -->
+    <div id="mainApp" class="container">
+        <header>
+            <div class="header-top">
+                <img src="Recorp_logo.png" alt="Recorp Logo" class="header-logo">
+                <h1>Standard Operating Procedure (SOP) Creation Tool</h1>
+            </div>
+            <!-- Tab Navigation -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="requests" onclick="switchTab('requests')">SOP Requests</button>
+                <button class="tab-btn" data-tab="editor" onclick="switchTab('editor')">SOP Editor</button>
+                <button class="tab-btn" data-tab="register" onclick="switchTab('register')">SOP Register</button>
+                <button class="tab-btn" data-tab="review" onclick="switchTab('review')">Under Review</button>
+                <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">Tasks & Progress</button>
+                <button class="tab-btn" data-tab="users" onclick="switchTab('users')">Users</button>
+            </div>
+            <div class="header-actions">
+                <button id="newSopBtn" class="btn btn-secondary">New SOP</button>
+                <button id="loadSopBtn" class="btn btn-secondary">Load SOP</button>
+                <button id="saveSopBtn" class="btn btn-primary">Save SOP</button>
+                <button id="emailSettingsBtn" class="btn btn-secondary" onclick="openEmailSettings()" title="Email Settings">📧 Email</button>
+                <button id="googleDriveSettingsBtn" class="btn btn-secondary" onclick="openGoogleDriveSettings()" title="Google Drive Settings">☁️ Drive</button>
+            </div>
+        </header>
+
+        <div id="workspaceAccessBanner" class="workspace-access-banner hidden" role="status">
+            <span>To see SOPs shared across the worksite on this device, connect once: <strong>☁️ Drive → Connect to Google Drive</strong>. No app login required.</span>
+            <button type="button" class="workspace-access-dismiss" onclick="document.getElementById('workspaceAccessBanner').classList.add('hidden')" aria-label="Dismiss">×</button>
+        </div>
+        <div id="connectionErrorBanner" class="workspace-access-banner" style="background:#c0392b;color:#fff;display:none;" role="alert">
+            <span id="connectionErrorText">Cannot reach SOP server. Check internet connection.</span>
+            <button type="button" class="workspace-access-dismiss" onclick="retryConnectionAndRefresh()" style="background:rgba(255,255,255,0.2);color:#fff;">Retry</button>
+        </div>
+
+        <div id="loadingIndicator" class="loading-indicator hidden">
+<div class="spinner"></div>
+            <span>Generating PDF...</span>
+        </div>
+
+        <!-- SOP Requests Tab Content (First Page) -->
+        <main id="sopRequests" class="tab-content active">
+            <section class="sop-section">
+                <h2>Submit New SOP Request</h2>
+                <form id="sopRequestForm" onsubmit="event.preventDefault(); submitSopRequest(); return false;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="requestTitle">Request Title *</label>
+                            <input type="text" id="requestTitle" placeholder="e.g., SOP for Daily Machine Startup" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="requestDepartment">Department *</label>
+                            <select id="requestDepartment" required>
+                                <option value="">Select Department</option>
+                                <option value="Production">Production</option>
+                                <option value="Engineering">Engineering</option>
+                                <option value="Compliance">Compliance</option>
+                                <option value="Health and Safety">Health and Safety</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="requestSubmitter">Requested By *</label>
+                            <input type="text" id="requestSubmitter" placeholder="Your Name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="requestPriority">Priority * (1 = Lowest, 5 = Urgent)</label>
+                            <select id="requestPriority" required>
+                                <option value="1">1 - Lowest</option>
+                                <option value="2">2 - Low</option>
+                                <option value="3" selected>3 - Medium</option>
+                                <option value="4">4 - High</option>
+                                <option value="5">5 - Urgent</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="requestDescription">Detailed Description</label>
+                        <textarea id="requestDescription" rows="4" placeholder="Describe the purpose and scope of the SOP needed..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Submit Request</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="sop-section" style="margin-top: 30px;">
+                <h2>Pending SOP Requests</h2>
+                <div class="list-filters">
+                    <div class="form-group">
+                        <label for="requestFilter">Filter by Priority:</label>
+                        <select id="requestFilter" onchange="filterRequests()">
+                            <option value="all">All Priorities</option>
+                            <option value="5">5 - Urgent</option>
+                            <option value="4">4 - High</option>
+                            <option value="3">3 - Medium</option>
+                            <option value="2">2 - Low</option>
+                            <option value="1">1 - Lowest</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="requestDeptFilter">Filter by Department:</label>
+                        <select id="requestDeptFilter" onchange="filterRequests()">
+                            <option value="all">All Departments</option>
+                            <option value="Production">Production</option>
+                            <option value="Engineering">Engineering</option>
+                            <option value="Compliance">Compliance</option>
+                            <option value="Health and Safety">Health and Safety</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="requestsListContainer">
+                    <!-- Requests will be loaded here -->
+                </div>
+                <div id="requestsEmpty" class="empty-state hidden">
+                    <p>No SOP requests found.</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- SOP Editor Tab Content -->
+        <main id="sopEditor" class="tab-content">
+            <!-- SOP Metadata Section -->
+            <section class="sop-section">
+                <h2>SOP Metadata</h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="sopTitle">SOP Title *</label>
+                        <input type="text" id="sopTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sopId">SOP ID / Reference Number *</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="text" id="sopId" required style="flex: 1;">
+                            <button type="button" class="btn btn-secondary btn-small" onclick="autoGenerateSopId(true)" title="Auto-generate SOP ID">Auto Generate</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="department">Department / Area *</label>
+                        <select id="department" required onchange="autoGenerateSopId(false)">
+                            <option value="">Select Department</option>
+                            <option value="Production">Production</option>
+                            <option value="Engineering">Engineering</option>
+                            <option value="Compliance">Compliance</option>
+                            <option value="Health and Safety">Health and Safety</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="version">Version *</label>
+                        <input type="text" id="version" placeholder="e.g., 1.0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="author">Author (User) *</label>
+                        <select id="author" required onchange="updateAuthorFromUser()">
+                            <option value="">Select User</option>
+                        </select>
+                        <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                            Select the user who created this SOP. They will receive a PDF via email.
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Approval Status</label>
+                        <input type="text" id="status" readonly style="background-color: #f5f5f5; cursor: not-allowed;" value="Draft">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Description Section -->
+            <section class="sop-section">
+                <h2>Description</h2>
+                <div class="form-group">
+                    <label for="description">Purpose / Description *</label>
+                    <textarea id="description" rows="5" required></textarea>
+                </div>
+            </section>
+
+            <!-- Safety Section -->
+            <section class="sop-section">
+                <h2>Safety</h2>
+                <div class="form-group">
+                    <label>Safety Warnings</label>
+                    <div id="warningsContainer">
+                        <div class="list-item">
+                            <input type="text" class="warning-input" placeholder="Enter safety warning">
+                            <button type="button" class="btn-remove" onclick="removeWarning(this)">×</button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-small" onclick="addWarning()">+ Add Warning</button>
+                </div>
+                <div class="form-group">
+                    <label>PPE Required</label>
+                    <div class="ppe-checkboxes">
+                        <label><input type="checkbox" value="Safety Glasses"> Safety Glasses</label>
+                        <label><input type="checkbox" value="Hard Hat"> Hard Hat</label>
+                        <label><input type="checkbox" value="Safety Boots"> Safety Boots</label>
+                        <label><input type="checkbox" value="Gloves"> Gloves</label>
+                        <label><input type="checkbox" value="Hearing Protection"> Hearing Protection</label>
+                        <label><input type="checkbox" value="Respirator"> Respirator</label>
+                        <label><input type="checkbox" value="Safety Vest"> Safety Vest</label>
+                    </div>
+                    <input type="text" id="ppeOther" placeholder="Other PPE (comma-separated)">
+                </div>
+                <div class="form-group">
+                    <label for="safetyNotes">Hazard / Safety Notes</label>
+                    <textarea id="safetyNotes" rows="3"></textarea>
+                </div>
+            </section>
+
+            <!-- Tools & Materials Section -->
+            <section class="sop-section">
+                <h2>Tools & Materials</h2>
+                <div class="form-group">
+                    <label>Tools Required</label>
+                    <div id="toolsContainer">
+                        <div class="list-item">
+                            <input type="text" class="tool-input" placeholder="Enter tool name">
+                            <button type="button" class="btn-remove" onclick="removeTool(this)">×</button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-small" onclick="addTool()">+ Add Tool</button>
+                </div>
+                <div class="form-group">
+                    <label>Materials / Consumables</label>
+                    <div id="materialsContainer">
+                        <div class="list-item">
+                            <input type="text" class="material-input" placeholder="Enter material name">
+                            <button type="button" class="btn-remove" onclick="removeMaterial(this)">×</button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-small" onclick="addMaterial()">+ Add Material</button>
+                </div>
+            </section>
+
+            <!-- Steps Section -->
+            <section class="sop-section">
+                <h2>Step-by-Step Instructions</h2>
+                <div id="stepsContainer">
+                    <!-- Steps will be dynamically added here -->
+                </div>
+                <button type="button" class="btn btn-primary" id="addFirstStepBtn" onclick="addStep(null)">+ Add First Step</button>
+            </section>
+            
+        </main>
+        
+        <!-- Floating Save Button -->
+        <div class="editor-footer-actions">
+            <button id="saveSopBtnBottom" class="btn btn-primary">Save SOP</button>
+        </div>
+
+        <!-- SOP Register Tab Content -->
+        <main id="sopRegister" class="tab-content">
+            <div class="register-header">
+                <h2>SOP Register</h2>
+                <div class="register-actions">
+                    <button class="btn btn-primary" onclick="refreshRegister()">Refresh</button>
+                    <button class="btn btn-secondary" onclick="showLoadSection()">Load SOP</button>
+                    <button class="btn btn-secondary" onclick="exportRegister()">Export Register</button>
+                </div>
+            </div>
+            
+            <!-- Load SOP Section (inline) -->
+            <div id="loadSopSection" class="load-sop-section hidden">
+                <div class="load-sop-header">
+                    <h3>Load SOP</h3>
+                    <button class="btn btn-secondary" onclick="closeLoadSection()">Close</button>
+                </div>
+                <div class="load-sop-content">
+                    <div id="savedSopsList"></div>
+                    <div class="form-group">
+                        <label>Or upload JSON file:</label>
+                        <input type="file" id="jsonFileInput" accept=".json" onchange="loadFromFile(event)">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Exports Section (inline) -->
+            <div id="exportsSection" class="load-sop-section hidden">
+                <div class="load-sop-header">
+                    <h3>Exported JSON Files</h3>
+                    <div>
+                        <button class="btn btn-primary" onclick="downloadAllExports()">Download All</button>
+                        <button class="btn btn-secondary" onclick="clearExports()">Clear List</button>
+                        <button class="btn btn-secondary" onclick="closeExportsSection()">Close</button>
+                    </div>
+                </div>
+                <div class="load-sop-content">
+                    <p style="color: #7f8c8d; margin-bottom: 15px;">
+                        <strong>Note:</strong> Files are saved to your browser's Downloads folder. 
+                        Use this section to easily access and re-download exported JSON files.
+                    </p>
+                    <div id="exportsList"></div>
+                </div>
+            </div>
+            <div class="register-filters">
+                <input type="text" id="registerSearch" placeholder="Search SOPs..." onkeyup="filterRegister()">
+                <select id="statusFilter" onchange="filterRegister()">
+                    <option value="">All Statuses</option>
+                    <option value="Draft">Draft</option>
+                    <option value="Under Review">Under Review</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Superseded">Superseded</option>
+                </select>
+                <select id="departmentFilter" onchange="filterRegister()">
+                    <option value="">All Departments</option>
+                </select>
+            </div>
+            <div class="register-table-container">
+                <table class="register-table">
+                    <thead>
+                        <tr>
+                            <th>SOP ID</th>
+                            <th>Title</th>
+                            <th>Department</th>
+                            <th>Version</th>
+                            <th>Author</th>
+                            <th>Status</th>
+                            <th>Effective Date</th>
+                            <th>Review Date</th>
+                            <th>Last Saved</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="registerTableBody">
+                        <!-- Register entries will be populated here -->
+                    </tbody>
+                </table>
+                <div id="registerEmpty" class="register-empty hidden">
+                    <p>No SOPs found. Create your first SOP in the Editor tab.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Under Review Tab Content -->
+        <main id="sopReview" class="tab-content">
+            <div class="review-header">
+                <h2>SOPs Under Review</h2>
+                <div class="review-actions">
+                    <button class="btn btn-primary" onclick="refreshReviewList()">Refresh</button>
+                </div>
+            </div>
+            <div class="review-filters">
+                <input type="text" id="reviewSearch" placeholder="Search SOPs..." onkeyup="filterReviewList()">
+                <select id="reviewDepartmentFilter" onchange="filterReviewList()">
+                    <option value="">All Departments</option>
+                </select>
+            </div>
+            <div id="reviewListContainer">
+                <!-- Review items will be populated here -->
+            </div>
+            <div id="reviewEmpty" class="review-empty hidden">
+                <p>No SOPs awaiting review.</p>
+            </div>
+            <!-- Review View (hidden by default) -->
+            <div id="reviewViewContainer" class="hidden">
+                <div class="review-view-header">
+                    <button class="btn btn-secondary" onclick="closeReviewView()">← Back to List</button>
+                    <h2>SOP Review</h2>
+                </div>
+                <div class="review-view-content">
+                    <div id="reviewViewSopContent">
+                        <!-- SOP content will be rendered here -->
+                    </div>
+                    <div class="review-view-actions">
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label for="reviewViewerName">Reviewer Name *</label>
+                            <select id="reviewViewerName" required style="width: 100%; max-width: 300px;">
+                                <option value="">Select Reviewer</option>
+                            </select>
+                            <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                                Select a reviewer from the user list
+                            </small>
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn btn-success" onclick="approveSopFromReviewView()">Approve & Generate PDF</button>
+                            <button class="btn btn-secondary" onclick="rejectSopFromReviewView()">Request Changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Users Management Tab Content -->
+        <main id="sopUsers" class="tab-content">
+            <div class="users-header">
+                <h2>User Management</h2>
+                <button class="btn btn-primary" onclick="showAddUserForm()">+ Add User</button>
+            </div>
+            
+            <!-- Add/Edit User Form -->
+            <div id="userFormContainer" class="user-form-container hidden">
+                <div class="user-form">
+                    <h4 id="userFormTitle">Add New User</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="userFirstName">First Name *</label>
+                            <input type="text" id="userFirstName" placeholder="John" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="userLastName">Last Name *</label>
+                            <input type="text" id="userLastName" placeholder="Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="userEmail">Email Address *</label>
+                            <input type="email" id="userEmail" placeholder="john.doe@example.com" required>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" onclick="saveUser()">Save User</button>
+                        <button class="btn btn-secondary" onclick="cancelUserForm()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Users List -->
+            <div id="usersListContainer">
+                <!-- Users will be populated here -->
+            </div>
+        </main>
+
+        <!-- Tasks & Progress Tab Content -->
+        <main id="sopTasks" class="tab-content">
+            <div class="tasks-header">
+                <h2>SOP Tasks & Progress Tracker</h2>
+            </div>
+            
+            <!-- Progress Tracker Section -->
+            <section class="progress-section">
+                <h3>Monthly Progress Tracker</h3>
+                <div id="progressTracker">
+                    <!-- Progress data will be populated here -->
+                </div>
+            </section>
+            
+            <!-- Tasks Section -->
+            <section class="tasks-section">
+                <div class="tasks-section-header">
+                    <h3>Submitted Tasks</h3>
+                    <button class="btn btn-primary" onclick="showTaskForm()">+ Submit New Task</button>
+                </div>
+                
+                <!-- Task Submission Form -->
+                <div id="taskFormContainer" class="task-form-container hidden">
+                    <div class="task-form">
+                        <h4>Submit New SOP Task</h4>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="taskTitle">Task Title *</label>
+                                <input type="text" id="taskTitle" placeholder="e.g., Create SOP for Equipment Maintenance" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="taskDepartment">Department *</label>
+                                <select id="taskDepartment" required>
+                                    <option value="">Select Department</option>
+                                    <option value="Production">Production</option>
+                                    <option value="Engineering">Engineering</option>
+                                    <option value="Compliance">Compliance</option>
+                                    <option value="Health and Safety">Health and Safety</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="taskSubmitter">Submitted By *</label>
+                                <input type="text" id="taskSubmitter" placeholder="Your name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="taskPriority">Priority</label>
+                                <select id="taskPriority">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Urgent">Urgent</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="taskDescription">Description</label>
+                            <textarea id="taskDescription" rows="4" placeholder="Describe what SOP needs to be created..."></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" onclick="submitTask()">Submit Task</button>
+                            <button class="btn btn-secondary" onclick="cancelTaskForm()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tasks List -->
+                <div id="tasksListContainer">
+                    <!-- Tasks will be populated here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+
+    <!-- Inline Confirmation Dialog -->
+    <div id="confirmationDialog" class="confirmation-dialog hidden">
+        <div class="confirmation-content">
+            <h3 id="confirmationTitle">Confirm Action</h3>
+            <p id="confirmationMessage"></p>
+            <div class="confirmation-actions">
+                <button id="confirmationOk" class="btn btn-primary">OK</button>
+                <button id="confirmationCancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inline Notification Toast -->
+    <div id="notificationToast" class="notification-toast hidden">
+        <div class="notification-content">
+            <span id="notificationMessage"></span>
+            <button class="notification-close" onclick="closeNotification()">×</button>
+        </div>
+    </div>
+
+    <!-- Image Capture Modal -->
+    <div id="imageModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Capture Image</h3>
+                <button class="modal-close" onclick="closeImageModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="camera-controls">
+                    <button class="btn btn-primary" onclick="startCamera()">Use Camera</button>
+                    <button class="btn btn-secondary" onclick="useFileUpload()">Upload File</button>
+                </div>
+                <div id="cameraContainer" class="hidden">
+                    <video id="videoElement" autoplay playsinline muted></video>
+                    <canvas id="canvasElement" class="hidden"></canvas>
+                    <div class="camera-actions">
+                        <button class="btn btn-primary" onclick="capturePhoto()">Capture Photo</button>
+                        <button class="btn btn-secondary" onclick="stopCamera()">Cancel</button>
+                    </div>
+                </div>
+                <div id="fileUploadContainer" class="hidden">
+                    <input type="file" id="fileInput" accept="image/*" multiple onchange="handleFileUpload(event)">
+                </div>
+                <div id="previewContainer" class="hidden">
+                    <div id="imagePreview"></div>
+                    <button class="btn btn-success" onclick="confirmImageSelection()">Confirm Selection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Settings Modal -->
+    <div id="emailSettingsModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Email Configuration</h3>
+                <button class="modal-close" onclick="closeEmailSettings()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px;">
+                    Configure email settings to automatically send approved PDFs to a holding email address.
+                </p>
+                
+                <div class="form-group">
+                    <label for="emailServiceId">EmailJS Service ID</label>
+                    <input type="text" id="emailServiceId" placeholder="service_xxxxx" style="width: 100%;">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        Get this from <a href="https://dashboard.emailjs.com/admin" target="_blank">EmailJS Dashboard</a>
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="emailTemplateId">EmailJS Template ID</label>
+                    <input type="text" id="emailTemplateId" placeholder="template_xxxxx" style="width: 100%;">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        Create a template in EmailJS with variables: to_email, sop_title, sop_id, pdf_content
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="emailPublicKey">EmailJS Public Key</label>
+                    <input type="text" id="emailPublicKey" placeholder="your_public_key" style="width: 100%;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="holdingEmail">Holding Email Address</label>
+                    <input type="email" id="holdingEmail" placeholder="recorpproduction@gmail.com" value="recorpproduction@gmail.com" style="width: 100%;">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        Email address where approved PDFs will be sent
+                    </small>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="saveEmailSettings()">Save Settings</button>
+                    <button class="btn btn-secondary" onclick="testEmailConnection()">Test Email</button>
+                </div>
+                
+                <div id="emailStatus" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; display: none;">
+                    <strong>Status:</strong> <span id="emailStatusText">Not configured</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Drive Settings Modal -->
+    <div id="googleDriveSettingsModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Google Drive Storage</h3>
+                <button class="modal-close" onclick="closeGoogleDriveSettings()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px;">
+                    Store your SOPs in Google Drive for cloud backup and cross-device access. All SOPs will be saved to a "SOPs" folder in your Google Drive.
+                </p>
+                
+                <div id="googleDriveStatus" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                    <strong>Status:</strong> <span id="googleDriveStatusText">Not configured</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="googleDriveClientId">Google OAuth Client ID *</label>
+                    <input type="text" id="googleDriveClientId" placeholder="xxxxx.apps.googleusercontent.com" style="width: 100%;" autocomplete="off">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        Get this from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a><br>
+                        Create OAuth 2.0 Client ID credentials (Web application type)
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="googleDriveApiKey">Google API Key *</label>
+                    <input type="password" id="googleDriveApiKey" placeholder="AIza..." style="width: 100%;" autocomplete="off">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        Get this from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a><br>
+                        Create an API Key and enable Google Drive API
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="googleDriveFolderId">Folder ID (Optional)</label>
+                    <input type="text" id="googleDriveFolderId" placeholder="Leave empty to auto-create 'SOPs' folder" style="width: 100%;">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        If you want to use an existing folder, paste its ID here. Otherwise, a new "SOPs" folder will be created automatically.
+                    </small>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="saveGoogleDriveConfigFromUI()">Save Configuration</button>
+                    <button class="btn btn-success" onclick="connectGoogleDrive()">Connect to Google Drive</button>
+                    <button class="btn btn-secondary" onclick="testGoogleDriveConnection()">Test Connection</button>
+                    <button class="btn btn-danger" onclick="disconnectGoogleDrive()">Disconnect</button>
+                </div>
+                
+                <div id="googleDriveSyncInfo" style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 5px; display: none;">
+                    <strong>✓ Connected!</strong> Your SOPs will automatically sync to Google Drive when saved.
+                </div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">
+                    <strong>Setup Instructions:</strong>
+                    <ol style="margin: 10px 0; padding-left: 20px;">
+                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                        <li>Create a new project or select an existing one</li>
+                        <li>Enable the Google Drive API</li>
+                        <li>Create OAuth 2.0 Client ID credentials (Web application)</li>
+                        <li><strong>Add this exact URL to Authorized JavaScript origins:</strong> <code id="googleDriveOriginHint" style="background:#eee;padding:2px 6px;border-radius:4px;word-break:break-all;">(loading…)</code></li>
+                        <li>Create an API Key</li>
+                        <li>Enter the Client ID and API Key above</li>
+                        <li>Click "Connect to Google Drive" to authenticate</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GitHub Storage Settings Modal (kept for backward compatibility) -->
+    <div id="githubSettingsModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>GitHub Cloud Sync</h3>
+                <button class="modal-close" onclick="closeGitHubSettings()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px;">
+                    Sync your SOPs to GitHub Gists for cloud backup and cross-device access.
+                </p>
+                
+                <div id="githubStatus" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                    <strong>Status:</strong> <span id="githubStatusText">Not connected</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="githubToken">GitHub Personal Access Token</label>
+                    <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="width: 100%;">
+                    <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                        Create a token at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a><br>
+                        Required scope: <code>gist</code>
+                    </small>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="saveGitHubToken()">Save Token</button>
+                    <button class="btn btn-secondary" onclick="testGitHubConnection()">Test Connection</button>
+                    <button class="btn btn-danger" onclick="disconnectGitHub()">Disconnect</button>
+                </div>
+                
+                <div id="githubSyncInfo" style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 5px; display: none;">
+                    <strong>✓ Connected!</strong> Your SOPs will automatically sync to GitHub Gists when saved.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GitHub Repository Configuration - REMOVED (Now using Google Drive) -->
+    <!-- Google Drive is now the primary storage method -->
+    
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+            onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';document.head.appendChild(s);"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <!-- Google Drive: gapi.client for API calls + GIS for OAuth (no deprecated auth2) -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+        if (typeof window.SOP_SHARED_API_URL === 'undefined') window.SOP_SHARED_API_URL = 'https://sop-backend-1065392834988.us-central1.run.app';
+        const cacheBuster = '?v=' + Date.now();
+        document.write('<script src="google-drive-storage.js' + cacheBuster + '"><\/script>');
+        document.write('<script src="shared-sop-api.js' + cacheBuster + '"><\/script>');
+        document.write('<script src="app.js' + cacheBuster + '"><\/script>');
+    </script>
+</body>
+</html>

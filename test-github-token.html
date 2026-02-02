@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GitHub Token Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .info { background: #d1ecf1; border-color: #bee5eb; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>GitHub Token Diagnostic Test</h1>
+    
+    <div class="test-section info">
+        <h3>Step 1: Enter Your Token</h3>
+        <input type="text" id="tokenInput" placeholder="github_pat_..." style="width: 100%; padding: 8px; margin: 10px 0;">
+        <button onclick="testToken()">Test Token</button>
+    </div>
+    
+    <div class="test-section" id="resultSection" style="display: none;">
+        <h3>Test Results</h3>
+        <div id="result"></div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>What to Check:</h3>
+        <ul>
+            <li><strong>401 Error:</strong> Token is invalid, expired, or missing 'repo' scope</li>
+            <li><strong>403 Error:</strong> Token doesn't have permission for this repository</li>
+            <li><strong>404 Error:</strong> Repository doesn't exist</li>
+            <li><strong>200 Success:</strong> Token works! Update it in index.html</li>
+        </ul>
+    </div>
+    
+    <script>
+    async function testToken() {
+        const token = document.getElementById('tokenInput').value.trim();
+        const owner = 'recorpproduction-prog';
+        const repo = 'recorp-sops-data';
+        const resultDiv = document.getElementById('result');
+        const resultSection = document.getElementById('resultSection');
+        
+        if (!token) {
+            alert('Please enter your token');
+            return;
+        }
+        
+        resultSection.style.display = 'block';
+        resultDiv.innerHTML = '<p>Testing...</p>';
+        
+        try {
+            // Test 1: Check repository access
+            console.log('Testing repository access...');
+            const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            const repoData = await repoResponse.json();
+            
+            if (repoResponse.ok) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ SUCCESS!</h4>
+                        <p><strong>Repository Found:</strong> ${repoData.full_name}</p>
+                        <p><strong>Private:</strong> ${repoData.private ? 'Yes' : 'No'}</p>
+                        <p><strong>Token Status:</strong> Valid with correct permissions</p>
+                        <hr>
+                        <p><strong>Next Step:</strong> Copy this token and paste it into index.html line 641</p>
+                    </div>
+                `;
+            } else {
+                let errorMsg = repoData.message || 'Unknown error';
+                let fixMsg = '';
+                
+                if (repoResponse.status === 401) {
+                    fixMsg = `
+                        <h4>Fix:</h4>
+                        <ol>
+                            <li>Go to <a href="https://github.com/settings/tokens" target="_blank">GitHub Tokens</a></li>
+                            <li>Create a new token (classic)</li>
+                            <li><strong>MUST check 'repo' scope</strong></li>
+                            <li>Generate and copy the token</li>
+                        </ol>
+                    `;
+                } else if (repoResponse.status === 403) {
+                    fixMsg = '<p>Token doesn\'t have permission. Make sure it has <strong>repo</strong> scope.</p>';
+                } else if (repoResponse.status === 404) {
+                    fixMsg = `<p>Repository doesn't exist. Create it at: <a href="https://github.com/${owner}/${repo}" target="_blank">https://github.com/${owner}/${repo}</a></p>`;
+                }
+                
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ ERROR ${repoResponse.status}</h4>
+                        <p><strong>Problem:</strong> ${errorMsg}</p>
+                        ${fixMsg}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `
+                <div class="error">
+                    <h4>❌ ERROR</h4>
+                    <p>${error.message}</p>
+                </div>
+            `;
+        }
+    }
+    </script>
+</body>
+</html>
+
+
+
