@@ -1,20 +1,15 @@
-# Render.com deployment config
-# Deploy: Connect GitHub repo, Render will use this file
+# Render.com Blueprint (optional - or use manual setup in Dashboard)
+# If this causes issues, ignore it and set Build/Start commands manually
 
 services:
   - type: web
     name: pallet-ticket-capture
     runtime: python
-    region: oregon
 
     buildCommand: pip install -r requirements_web.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT web_app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 web_app:app
 
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
       - key: OCR_PROVIDER
         value: ocrspace
-      # Add these in Render Dashboard:
-      # GOOGLE_SHEET_ID = your sheet ID
-      # OCR_API_KEY = optional, for higher OCR.space limits
+      # Add in Dashboard: GOOGLE_SHEET_ID, GOOGLE_CREDENTIALS_JSON (or Secret File)

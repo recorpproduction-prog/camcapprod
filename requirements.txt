@@ -23,9 +23,10 @@ google-auth-httplib2>=0.1.1
 #   Linux: Install python3-tk: sudo apt-get install python3-tk
 #   Mac: Should be included by default
 
-# Review server
+# Review server / Web app
 flask>=3.0.0
 flask-cors>=4.0.0
+gunicorn>=21.0.0
 
 # Optional: For better image processing
 scikit-image>=0.21.0

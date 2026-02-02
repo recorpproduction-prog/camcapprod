@@ -1,320 +1,376 @@
-# SOP (Standard Operating Procedure) Creation Tool
+# Pallet Ticket Capture System
 
-A production-ready, web-based application for creating, editing, saving, and exporting Standard Operating Procedures as professional PDFs.
+An automated Google Apps Script Web App that captures pallet tickets using a phone/tablet camera, performs OCR, and submits records for supervisor review. **NO manual buttons required** - fully automatic detection and processing.
 
 ## Features
 
-- **Complete SOP Management**: Create, edit, save, and load SOPs
-- **Structured Data Model**: All mandatory SOP sections included
-- **Image Capture**: Browser camera API with file upload fallback
-- **Multiple Images per Step**: Capture or upload multiple images for each step
-- **PDF Export**: Professional PDF generation with embedded images
-- **Local Storage**: Automatic saving and persistence across sessions
-- **Modern UI**: Clean, responsive interface
+✅ **Automatic Camera Detection**
+- Camera starts automatically on page load
+- Frame sampling every 500-1000ms
+- Detects tickets based on sharpness, text density, and frame analysis
 
-## SOP Structure
+✅ **Automatic OCR & Parsing**
+- Google Vision API (preferred) or Drive OCR (fallback)
+- Intelligent field parsing with confidence levels
+- Supports multiple label variants
 
-Each SOP includes:
+✅ **Supervisor Review Interface**
+- Auto-refreshing table (every 5 seconds)
+- Full image preview with editable parsed fields
+- Approve/Reject workflow
+- Confidence-based field coloring (Green/Amber/Red)
 
-### Metadata
-- SOP Title
-- SOP ID / Reference Number
-- Department / Area
-- Version
-- Author
-- Reviewer
-- Approval Status
-- Effective Date
-- Review Date
+✅ **Google Sheets Integration**
+- `PENDING_REVIEW` - New submissions
+- `APPROVED_RECORDS` - Supervisor-approved entries
+- `REJECTED_RECORDS` - Rejected with reasons
 
-### Content Sections
-- **Description**: Purpose and description
-- **Safety**: Warnings, PPE requirements, safety notes
-- **Tools & Materials**: Required tools and consumables
-- **Step-by-Step Instructions**: Detailed steps with images
+✅ **Security**
+- Google Sign-In required
+- Supervisor whitelist access control
+- Role-based permissions
 
-### Step Features
-- Auto-incrementing step numbers
-- Step title and detailed description
-- Optional safety notes per step
-- Multiple images per step
-- Add step below current step functionality
+---
 
-## File Structure
+## Setup Instructions
 
+### 1. Create Google Apps Script Project
+
+1. Go to [script.google.com](https://script.google.com)
+2. Click **"New Project"**
+3. Copy all files from this repository into the project:
+   - `Code.gs`
+   - `Index.html`
+   - `Review.html`
+   - `app.js` (create as HTML file, paste JS content inside `<script>` tags)
+   - `review.js` (create as HTML file, paste JS content inside `<script>` tags)
+   - `styles.css` (create as HTML file, paste CSS content inside `<style>` tags)
+
+**Note:** In Google Apps Script, `.js` and `.css` files must be created as HTML files. The `include()` function in `Code.gs` will extract their content.
+
+### 2. Create Google Sheet
+
+1. Create a new Google Sheet
+2. Copy the **Sheet ID** from the URL:
+   ```
+   https://docs.google.com/spreadsheets/d/[SHEET_ID]/edit
+   ```
+3. Open `Code.gs` and replace `PASTE_SHEET_ID_HERE` with your Sheet ID:
+   ```javascript
+   const SHEET_ID = "your_sheet_id_here";
+   ```
+
+The system will automatically create three sheets:
+- `PENDING_REVIEW`
+- `APPROVED_RECORDS`
+- `REJECTED_RECORDS`
+
+### 3. Configure Supervisor Emails
+
+In `Code.gs`, update the supervisor list:
+
+```javascript
+const SUPERVISORS = [
+  "supervisor1@company.com",
+  "supervisor2@company.com"
+];
 ```
-sop-tool/
-├── index.html          # Main HTML file
-├── styles.css          # All styling
-├── app.js              # Application logic
-└── README.md           # This file
+
+### 4. Set Up Google Drive Folder Structure
+
+The system automatically creates:
+```
+Google Drive/
+  └── Pallet_Tickets/
+      └── YYYY/
+          └── MM/
+              └── pallet_timestamp_email.png
 ```
 
-## How to Run Locally
+Ensure the Apps Script has permission to create folders in Drive.
 
-### Option 1: Simple HTTP Server (Recommended)
+### 5. Enable Required APIs
 
-1. **Using Python** (if installed):
-   ```bash
-   # Python 3
-   python -m http.server 8000
-   
-   # Python 2
-   python -m SimpleHTTPServer 8000
+#### Option A: Google Vision API (Recommended for better OCR)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create or select a project
+3. Enable **Cloud Vision API**
+4. Create an API key:
+   - Go to **APIs & Services** > **Credentials**
+   - Click **Create Credentials** > **API Key**
+   - Copy the API key
+5. Store the API key in Apps Script:
+   - In Apps Script editor, go to **Project Settings** (gear icon)
+   - Under **Script Properties**, click **Add script property**
+   - Key: `VISION_API_KEY`
+   - Value: `your_api_key_here`
+6. In `Code.gs`, set `hasVisionAPI()` to return `true`:
+   ```javascript
+   function hasVisionAPI() {
+     return true; // Set to true after enabling Vision API
+   }
    ```
 
-2. **Using Node.js** (if installed):
-   ```bash
-   npx http-server -p 8000
-   ```
+#### Option B: Drive OCR (Default Fallback)
 
-3. **Using PHP** (if installed):
-   ```bash
-   php -S localhost:8000
-   ```
+Works automatically but requires:
+- **Drive API** enabled in Apps Script (usually enabled by default)
+- **Advanced Drive Service** enabled:
+  - In Apps Script editor: **Extensions** > **Advanced Google services**
+  - Enable **Drive API**
 
-4. Open your browser and navigate to:
-   ```
-   http://localhost:8000
-   ```
+### 6. Deploy as Web App
 
-### Option 2: Direct File Opening
+1. In Apps Script editor, click **Deploy** > **New deployment**
+2. Click the gear icon ⚙️ next to **Select type** > **Web app**
+3. Configure:
+   - **Description**: "Pallet Ticket Capture System"
+   - **Execute as**: "Me" (your account)
+   - **Who has access**: 
+     - **Anyone** (for testing) or
+     - **Anyone with Google account** (recommended)
+4. Click **Deploy**
+5. Copy the **Web App URL**
+6. Click **Authorize access** and grant permissions:
+   - Google Sheets (read/write)
+   - Google Drive (read/write)
+   - User info (email)
 
-**Note**: Some features (like camera access) may require HTTPS or localhost. For full functionality, use a local server.
+### 7. Test the System
 
-1. Simply open `index.html` in your web browser
-2. Some browsers may block camera access when opening files directly
+1. **Operator Page**: Open the Web App URL
+   - Camera should start automatically
+   - Point at a pallet ticket
+   - Wait for automatic detection and processing
 
-### Option 3: VS Code Live Server
+2. **Supervisor Page**: Open `[WEB_APP_URL]?path=review`
+   - Should show pending records
+   - Auto-refreshes every 5 seconds
 
-If you use Visual Studio Code:
+---
 
-1. Install the "Live Server" extension
-2. Right-click on `index.html`
-3. Select "Open with Live Server"
+## Column Configuration
 
-## Browser Requirements
+Edit the `COLUMNS` array in `Code.gs` to customize fields:
 
-- **Modern browser** (Chrome, Firefox, Edge, Safari - latest versions)
-- **Camera access** (for image capture feature)
-- **JavaScript enabled**
-- **LocalStorage support** (standard in all modern browsers)
+```javascript
+const COLUMNS = [
+  "timestamp",
+  "status",
+  "pallet_id",
+  "product",
+  "sku",
+  "batch_lot",
+  "quantity",
+  "unit",
+  "best_before",
+  "manufacture_date",
+  "line",
+  "shift",
+  "operator",
+  "location",
+  "notes",
+  "image_drive_url",
+  "raw_ocr_text",
+  "reviewed_by",
+  "reviewed_timestamp"
+];
+```
 
-## Usage Guide
+Sheets will auto-create with these headers.
 
-### Creating a New SOP
+---
 
-1. Click **"New SOP"** to start fresh
-2. Fill in all required metadata fields (marked with *)
-3. Add description, safety information, tools, and materials
-4. Click **"+ Add First Step"** to begin adding steps
+## Detection Tuning
 
-### Adding Steps
+Adjust detection parameters in `app.js`:
 
-1. Click **"+ Add Step Below"** button under any step
-2. Enter step title and description
-3. Add optional safety notes
-4. Click **"+ Add Image"** to capture or upload images
+```javascript
+// Frame sampling interval (ms)
+const FRAME_SAMPLE_INTERVAL = 800; // Default: 800ms
 
-### Capturing Images
+// Cooldown between submissions (ms)
+const COOLDOWN_PERIOD = 30000; // Default: 30 seconds
 
-1. Click **"+ Add Image"** on any step
-2. Choose:
-   - **Use Camera**: Access device camera (requires permission)
-   - **Upload File**: Select image files from your computer
-3. Preview and confirm selection
+// Minimum sharpness threshold
+const SHARPNESS_THRESHOLD = 50; // Increase for stricter detection
 
-### Saving SOPs
+// Minimum text density (0.0 - 1.0)
+const TEXT_DENSITY_THRESHOLD = 0.1; // Increase to require more text
+```
 
-1. Click **"Save SOP"** button
-   - Automatically saves to browser LocalStorage
-   - Also downloads a JSON backup file
-2. SOPs are auto-saved as you type
+**To tune:**
 
-### Loading SOPs
+1. **Too many false detections?**
+   - Increase `SHARPNESS_THRESHOLD`
+   - Increase `TEXT_DENSITY_THRESHOLD`
+   - Increase `COOLDOWN_PERIOD`
 
-1. Click **"Load SOP"** button
-2. Choose from saved SOPs in the list, or
-3. Upload a JSON file from your computer
+2. **Missing tickets?**
+   - Decrease `SHARPNESS_THRESHOLD`
+   - Decrease `TEXT_DENSITY_THRESHOLD`
+   - Decrease `FRAME_SAMPLE_INTERVAL`
 
-### Exporting to PDF
+---
 
-1. Ensure all required fields are filled
-2. Add at least one step
-3. Click **"Generate PDF"**
-4. Wait for PDF generation (indicator will show)
-5. PDF will download automatically
+## Parsing Rule Customization
 
-## Data Storage
+Edit the `parsePalletTicket()` function in `Code.gs` to customize field parsing.
 
-The application uses **browser LocalStorage** for persistence:
+### Add New Fields
 
-- SOPs are automatically saved as you edit
-- Data persists across browser sessions
-- Each SOP is keyed by its SOP ID
-- JSON files can be exported/imported for backup
+```javascript
+parsed.your_field = parseField(normalized, 
+  ['KEYWORD1', 'KEYWORD2', 'LABEL'], 
+  confidence, 
+  'your_field'
+);
+```
 
-### Storage Location
+### Customize Keywords
 
-- **Browser**: LocalStorage (browser-specific)
-- **Export**: JSON files saved to your Downloads folder
-- **PDF**: Generated PDFs saved to your Downloads folder
+Each field can have multiple keyword variants:
 
-## How to Deploy Online
+```javascript
+parsed.pallet_id = parseField(normalized, 
+  ['PALLET', 'PALLET ID', 'PAL ID', 'PALLET#', 'PALLET NO'], 
+  confidence, 
+  'pallet_id'
+);
+```
 
-### Option 1: GitHub Pages (Free)
+The parser searches for patterns like:
+- `PALLET ID: ABC123`
+- `PALLET : XYZ789`
+- `PALLET# 456`
 
-1. Create a GitHub repository
-2. Upload all files to the repository
-3. Go to repository Settings → Pages
-4. Select source branch (usually `main` or `master`)
-5. Your site will be available at: `https://yourusername.github.io/repository-name`
+### Confidence Levels
 
-**Note**: GitHub Pages serves over HTTPS, which is required for camera access.
+- **High**: Exact keyword match with colon/separator
+- **Medium**: Keyword found nearby
+- **Low**: Field not found
 
-### Option 2: Netlify (Free)
+Fields with medium/low confidence are highlighted in the supervisor review panel.
 
-1. Create account at [netlify.com](https://netlify.com)
-2. Drag and drop the project folder to Netlify dashboard, or
-3. Connect your GitHub repository
-4. Site will be automatically deployed with HTTPS
+---
 
-### Option 3: Vercel (Free)
+## URL Routes
 
-1. Create account at [vercel.com](https://vercel.com)
-2. Import your project (GitHub/GitLab/Bitbucket)
-3. Deploy automatically with HTTPS
+- **Operator Capture**: `[WEB_APP_URL]` or `[WEB_APP_URL]?path=capture`
+- **Supervisor Review**: `[WEB_APP_URL]?path=review`
 
-### Option 4: Traditional Web Hosting
-
-1. Upload all files to your web server via FTP/SFTP
-2. Ensure files are in the root directory or a subdirectory
-3. Access via: `https://yourdomain.com` or `https://yourdomain.com/sop-tool`
-
-### Option 5: AWS S3 + CloudFront
-
-1. Create an S3 bucket
-2. Enable static website hosting
-3. Upload files to bucket
-4. Configure CloudFront for HTTPS
-5. Point your domain to CloudFront
-
-## Important Notes for Deployment
-
-### HTTPS Requirement
-
-- **Camera access requires HTTPS** (or localhost)
-- Ensure your hosting provider supports HTTPS
-- Most modern hosting services provide free SSL certificates
-
-### Browser Compatibility
-
-- Tested on Chrome, Firefox, Edge, Safari
-- Camera API may vary by browser
-- File upload works on all browsers
-
-### Performance
-
-- PDF generation may take a few seconds for SOPs with many images
-- Large images are automatically compressed
-- LocalStorage has size limits (~5-10MB depending on browser)
+---
 
 ## Troubleshooting
 
-### Camera Not Working
+### Camera Not Starting
 
-- Ensure you're using HTTPS or localhost
-- Check browser permissions for camera access
-- Use file upload as fallback
+- **Check browser permissions**: Ensure camera access is allowed
+- **HTTPS required**: Web App must be accessed via HTTPS (Google handles this)
+- **Mobile devices**: Ensure using HTTPS and modern browser (Chrome, Safari)
 
-### PDF Generation Fails
+### OCR Not Working
 
-- Check browser console for errors
-- Ensure all images are loaded
-- Try with fewer images first
+- **Vision API**: Verify API key is set in Script Properties
+- **Drive OCR**: Ensure Drive API is enabled
+- **Image quality**: Ensure good lighting and focus
+- **Check logs**: View execution logs in Apps Script editor
 
-### Data Not Persisting
+### Permissions Errors
 
-- Check browser LocalStorage is enabled
-- Clear browser cache and try again
-- Export JSON backup regularly
+- **Sheets access**: Ensure Sheet ID is correct and Sheet is shared with script owner
+- **Drive access**: Ensure Drive API is enabled
+- **User access**: Re-authorize Web App if permissions changed
 
-### Images Not Showing
+### Duplicate Submissions
 
-- Check image file format (JPEG, PNG supported)
-- Ensure images are not corrupted
-- Try re-uploading images
+- Increase `COOLDOWN_PERIOD` in `app.js`
+- Check frame hash detection is working (see browser console)
 
-## Technical Details
+### Supervisor Access Denied
 
-### Dependencies (CDN)
+- Verify email is in `SUPERVISORS` array in `Code.gs`
+- Ensure user is signed in with correct Google account
+- Check execution logs for authentication errors
 
-- **jsPDF 2.5.1**: PDF generation
-- **html2canvas 1.4.1**: HTML to canvas conversion (for PDF)
+---
 
-### Browser APIs Used
+## Architecture Notes
 
-- **getUserMedia**: Camera access
-- **FileReader**: File upload handling
-- **LocalStorage**: Data persistence
-- **Canvas API**: Image processing
+### File Structure in Google Apps Script
 
-### Data Format
-
-SOPs are stored as JSON with the following structure:
-
-```json
-{
-  "meta": {
-    "title": "",
-    "sopId": "",
-    "department": "",
-    "version": "",
-    "author": "",
-    "reviewer": "",
-    "status": "",
-    "effectiveDate": "",
-    "reviewDate": ""
-  },
-  "description": "",
-  "safety": {
-    "warnings": [],
-    "ppe": [],
-    "notes": ""
-  },
-  "tools": [],
-  "materials": [],
-  "steps": [
-    {
-      "id": "",
-      "title": "",
-      "description": "",
-      "safetyNote": "",
-      "images": []
-    }
-  ]
-}
 ```
+Code.gs          - Backend server functions
+Index.html       - Operator capture page
+Review.html      - Supervisor review page
+app.js           - Operator page JavaScript (as HTML file)
+review.js        - Supervisor page JavaScript (as HTML file)
+styles.css       - Shared CSS (as HTML file)
+```
+
+### How Include Works
+
+The `include()` function in `Code.gs` extracts content from HTML files:
+
+```javascript
+<?!= include('app.js'); ?>  // Inserts app.js content
+<?!= include('styles.css'); ?>  // Inserts styles.css content
+```
+
+### Data Flow
+
+1. **Operator Page** (`Index.html` + `app.js`)
+   - Camera → Frame Analysis → Detection → Capture → Submit
+
+2. **Backend** (`Code.gs`)
+   - Save Image (Drive) → OCR → Parse → Write to `PENDING_REVIEW`
+
+3. **Supervisor Page** (`Review.html` + `review.js`)
+   - Auto-refresh → Display Pending → Review → Approve/Reject
+
+4. **Approval Flow**
+   - Approve → Write to `APPROVED_RECORDS` + Update status
+   - Reject → Write to `REJECTED_RECORDS` + Add reason
+
+---
 
 ## Security Considerations
 
-- All data is stored locally in the browser
-- No data is sent to external servers
-- Camera access requires user permission
-- PDF generation happens client-side
+1. **Supervisor Whitelist**: Only emails in `SUPERVISORS` array can approve/reject
+2. **Google Sign-In**: Required for all operations
+3. **Drive Sharing**: Images are set to "Anyone with link" for viewing - adjust if needed:
+   ```javascript
+   // In saveImageToDrive(), change:
+   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+   // To:
+   file.setSharing(DriveApp.Access.DOMAIN, DriveApp.Permission.VIEW);
+   ```
+4. **Web App Access**: Set to "Anyone with Google account" for production
 
-## License
+---
 
-This project is provided as-is for use in creating Standard Operating Procedures.
+## Performance Optimization
+
+- **Frame Sampling**: Adjust `FRAME_SAMPLE_INTERVAL` based on device performance
+- **Image Resolution**: Camera resolution controlled in `app.js` constraints
+- **OCR Caching**: Consider caching OCR results for duplicate images
+- **Sheet Queries**: Supervisor page auto-refreshes every 5s - adjust as needed
+
+---
 
 ## Support
 
 For issues or questions:
-1. Check browser console for errors
-2. Verify all required fields are filled
-3. Ensure browser supports required APIs
-4. Try in a different browser
+1. Check execution logs in Apps Script editor
+2. Check browser console for frontend errors
+3. Verify all APIs are enabled
+4. Ensure Sheet ID and supervisor emails are correct
 
 ---
 
-**Success Criteria**: You should be able to run the application, create an SOP, add steps, capture photos, save, reload, and export a PDF with zero errors.
+## License
+
+This system is provided as-is for internal use.
+
+

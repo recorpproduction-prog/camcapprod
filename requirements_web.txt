@@ -1,8 +1,7 @@
-# Web Application Requirements
+# Web Application Requirements (Pillow instead of OpenCV for faster cloud builds)
 Flask>=3.0.0
 gunicorn>=21.0.0
 flask-cors>=4.0.0
-opencv-python>=4.8.0
 numpy>=1.24.0
 Pillow>=10.0.0
 requests>=2.31.0

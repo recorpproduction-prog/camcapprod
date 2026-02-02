@@ -1,79 +1,96 @@
-# Deploy Pallet Ticket Capture Online (GitHub + Render)
+# Deploy Pallet Ticket Capture Online
 
-Deploy the app so it runs in a web browser from any device. Uses **Render.com** (free tier) + **GitHub**.
+**Important:** This app needs a **Python server** (Flask). **GitHub Pages will NOT work** – it only hosts static HTML/CSS/JS files, not backend code.
 
----
-
-## 1. Push to GitHub
-
-```bash
-cd camcapprod
-git init
-git add .
-git commit -m "Initial pallet ticket capture app"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-git push -u origin main
-```
+Use one of these instead:
 
 ---
 
-## 2. Deploy on Render
+## Option A: Render.com (Recommended)
 
-1. Go to [render.com](https://render.com) and sign up (free)
-2. Click **New** → **Web Service**
-3. Connect your **GitHub** account and select your repository
-4. Render auto-detects Python:
+1. Push your code to GitHub (create a repo, push the `camcapprod` folder contents).
+
+2. Go to **[render.com](https://render.com)** → Sign up (free with GitHub).
+
+3. Click **New** → **Web Service**.
+
+4. Connect GitHub and select your repository.
+
+5. **Root Directory:** Leave blank (or use `/` if it asks).
+
+6. **Build & Deploy:**
+   - **Runtime:** Python 3
    - **Build Command:** `pip install -r requirements_web.txt`
    - **Start Command:** `gunicorn --bind 0.0.0.0:$PORT web_app:app`
-5. Click **Advanced** and add **Environment Variables**:
 
-| Key | Value |
-|-----|-------|
-| `GOOGLE_SHEET_ID` | Your Google Sheet ID (from the sheet URL) |
-| `OCR_PROVIDER` | `ocrspace` (default, free) |
-| `OCR_API_KEY` | Optional: get from ocr.space for higher limits |
+7. **Environment Variables** (in Dashboard):
+   - `OCR_PROVIDER` = `ocrspace`
+   - `GOOGLE_SHEET_ID` = your Google Sheet ID (from the URL)
 
-6. For **Google Sheets**, add your service account credentials:
-   - In Render: **Environment** → **Secret Files**
-   - Add file: `credentials.json` with the contents of your Google service account JSON
+8. **Google Sheets credentials** (pick one):
+   - **Secret Files:** Add `credentials.json` with your service account JSON contents, or
+   - **Environment variable:** Add `GOOGLE_CREDENTIALS_JSON` = paste the entire JSON as the value
 
-7. Click **Create Web Service**
+9. Click **Create Web Service**. Render will build and deploy. Use the generated URL (e.g. `https://your-app.onrender.com`).
 
 ---
 
-## 3. Google Sheets Setup
+## Option B: Railway.app
 
-1. Create a Google Sheet
-2. Copy the **Sheet ID** from the URL:  
-   `https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit`
-3. Create a [Google Cloud service account](https://console.cloud.google.com/iam-admin/serviceaccounts)
-4. Enable **Google Sheets API** and **Google Drive API**
-5. Create a key (JSON) and download it
-6. Share your Google Sheet with the service account email (Editor access)
+1. Push code to GitHub.
 
----
+2. Go to **[railway.app](https://railway.app)** → Login with GitHub.
 
-## 4. HTTPS and Camera
+3. **New Project** → **Deploy from GitHub repo** → Select your repo.
 
-- Render provides **HTTPS** automatically
-- **Camera requires HTTPS** in most browsers
-- Use your Render URL (e.g. `https://pallet-ticket-capture.onrender.com`)
+4. Railway usually auto-detects Python. If not:
+   - **Build Command:** `pip install -r requirements_web.txt`
+   - **Start Command:** `gunicorn web_app:app`
 
----
+5. Add variables:
+   - `GOOGLE_SHEET_ID` = your Sheet ID
+   - `OCR_PROVIDER` = `ocrspace`
+   - `GOOGLE_CREDENTIALS_JSON` = paste your full service account JSON
 
-## 5. Features When Online
-
-- **Capture** – Camera, auto-detect, OCR, parsing
-- **Duplicate check** – Blocks same SSCC (unless Test Mode is ON)
-- **Test Mode** – When ON, allows duplicates for testing
-- **Review** – Supervisor approves/rejects
-- **Google Sheets** – Approved records written to your sheet
+6. Paste your full Google service account JSON into that variable. For `credentials.json`: use Railway’s “Variables” → “Raw Editor” and add as a file variable if supported, or set `GOOGLE_CREDENTIALS_JSON` and load it from the app.
 
 ---
 
-## 6. Notes
+## Option C: PythonAnywhere
 
-- **Free tier** – Render may spin down after 15 min of inactivity (cold start)
-- **Local storage** – `local_records` and images are ephemeral on Render; use Google Sheets as primary storage
-- **credentials.json** – Add via Render Secret Files for production
+1. Sign up at **[pythonanywhere.com](https://www.pythonanywhere.com)** (free account).
+
+2. Upload your project (or clone from GitHub).
+
+3. Create a **Web App** → Manual configuration → Flask.
+
+4. Point it to your `web_app.py` and set the WSGI file.
+
+5. Add `requirements_web.txt` packages via the **Bash** console:  
+   `pip install -r requirements_web.txt`
+
+6. Set environment variables in the Web tab.
+
+---
+
+## Why Not GitHub Pages?
+
+| GitHub Pages | This app |
+|--------------|----------|
+| Static HTML/CSS/JS only | Python Flask backend |
+| No server, no APIs | OCR API, image processing |
+| No database/Sheets | Google Sheets integration |
+
+Use Render, Railway, or PythonAnywhere for this app.
+
+---
+
+## Files Needed in Your Repo
+
+Your GitHub repo should include at least:
+- `web_app.py`
+- `requirements_web.txt`
+- `templates/` folder
+- `ocr_processor.py`, `data_parser.py`, `sheets_integration.py`
+
+Do **not** commit `credentials.json` to GitHub. Add it as a secret on your hosting platform.

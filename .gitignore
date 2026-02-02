@@ -1,0 +1,26 @@
+# Credentials - NEVER commit
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+env/
+
+# Local data
+local_records/
+static/captured_images/
+captured_images/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

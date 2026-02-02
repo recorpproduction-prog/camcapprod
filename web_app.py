@@ -8,9 +8,10 @@ from flask_cors import CORS
 import os
 import json
 import base64
+import io
 from datetime import datetime
 from pathlib import Path
-import cv2
+from PIL import Image
 import numpy as np
 
 # Import modules
@@ -21,13 +22,14 @@ from data_parser import DataParser
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# Configuration
+# Configuration - works for local and cloud (Render, Railway, etc.)
 CONFIG = {
     'images_folder': 'static/captured_images',
     'ocr_provider': os.getenv('OCR_PROVIDER', 'ocrspace'),
     'ocr_api_key': os.getenv('OCR_API_KEY'),
     'sheets_id': os.getenv('GOOGLE_SHEET_ID'),
-    'credentials_file': os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
+    'credentials_file': os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json'),
+    'credentials_json': os.getenv('GOOGLE_CREDENTIALS_JSON'),  # Alt: paste JSON as env var
 }
 
 # Initialize components
@@ -51,10 +53,26 @@ def init_components():
         ocr = None
     
     # Initialize Sheets if configured
-    if CONFIG.get('sheets_id') and os.path.exists(CONFIG['credentials_file']):
+    creds_available = (
+        (CONFIG.get('credentials_json') and CONFIG['credentials_json'].strip()) or
+        (CONFIG.get('credentials_file') and os.path.exists(CONFIG['credentials_file']))
+    )
+    if CONFIG.get('sheets_id') and creds_available:
         try:
-            sheets = SheetsIntegration(CONFIG['sheets_id'], CONFIG['credentials_file'])
-            sheets.connect(CONFIG['credentials_file'])
+            if CONFIG.get('credentials_json') and CONFIG['credentials_json'].strip():
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(CONFIG['credentials_json'].strip())
+                    cred_path = f.name
+                sheets = SheetsIntegration(CONFIG['sheets_id'], cred_path)
+                sheets.connect(cred_path)
+                try:
+                    os.unlink(cred_path)
+                except Exception:
+                    pass
+            else:
+                sheets = SheetsIntegration(CONFIG['sheets_id'], CONFIG['credentials_file'])
+                sheets.connect(CONFIG['credentials_file'])
             print(f"[OK] Google Sheets connected: {CONFIG['sheets_id']}")
         except Exception as e:
             print(f"[ERROR] Sheets connection error: {e}")
@@ -67,43 +85,51 @@ def init_components():
     Path('local_records').mkdir(exist_ok=True)
     print("[OK] Directories created")
 
-def resize_for_ocr(frame, max_size_kb=900):
+def resize_for_ocr(img, max_size_kb=900):
     """
-    Resize and compress image to stay under OCR.space 1MB (1024 KB) limit.
-    Returns (frame_for_display, jpeg_bytes) - jpeg_bytes is guaranteed under limit.
+    Resize and compress image to stay under OCR.space 1MB limit.
+    img: PIL Image. Returns jpeg_bytes guaranteed under limit.
     """
-    height, width = frame.shape[:2]
     target_bytes = max_size_kb * 1024
+    width, height = img.size
     
     for max_dim in [800, 720, 600, 480, 400]:
         for quality in [85, 80, 75, 65, 55]:
-            # Resize
             if width > max_dim or height > max_dim:
                 scale = max_dim / max(width, height)
                 new_w = int(width * scale)
                 new_h = int(height * scale)
-                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
             else:
-                resized = frame
-            
-            # Encode to check size
-            _, buf = cv2.imencode('.jpg', resized, [cv2.IMWRITE_JPEG_QUALITY, quality])
-            buf_bytes = buf.tobytes()
+                resized = img
+            buf = io.BytesIO()
+            resized.convert('RGB').save(buf, 'JPEG', quality=quality, optimize=True)
+            buf_bytes = buf.getvalue()
             if len(buf_bytes) < target_bytes:
-                return resized, buf_bytes
+                return buf_bytes
     
-    # Fallback: aggressive resize to 480x360
-    resized = cv2.resize(frame, (480, 360), interpolation=cv2.INTER_AREA)
-    _, buf = cv2.imencode('.jpg', resized, [cv2.IMWRITE_JPEG_QUALITY, 50])
-    return resized, buf.tobytes()
+    resized = img.resize((480, 360), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    resized.convert('RGB').save(buf, 'JPEG', quality=50)
+    return buf.getvalue()
 
 
-# Initialize on startup
-print("=" * 60)
-print("Starting Pallet Ticket Capture Web Application")
-print("=" * 60)
-init_components()
-print("=" * 60)
+# Initialize on startup (wrap to avoid blocking deploy)
+try:
+    print("=" * 60)
+    print("Starting Pallet Ticket Capture Web Application")
+    print("=" * 60)
+    init_components()
+    print("=" * 60)
+except Exception as e:
+    print(f"[WARN] Init error (app will start anyway): {e}")
+    import traceback
+    traceback.print_exc()
+
+@app.route('/health')
+def health():
+    """Quick health check - use this to verify deploy"""
+    return jsonify({'status': 'ok', 'ocr': ocr is not None, 'sheets': sheets is not None})
 
 @app.route('/')
 def index():
@@ -152,18 +178,16 @@ def submit_ticket():
             image_data = image_data.split(',')[1]
         
         image_bytes = base64.b64decode(image_data)
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        try:
+            img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Invalid image: {e}'}), 400
         
-        if frame is None:
-            return jsonify({'success': False, 'error': 'Invalid image data'}), 400
-        
-        # Resize and compress to stay under OCR.space 1MB limit - returns (frame, bytes) 
         timestamp = datetime.now()
         images_dir = Path(CONFIG['images_folder'])
         filename = f"pallet_{timestamp.strftime('%Y%m%d_%H%M%S')}.jpg"
         image_path = images_dir / filename
-        _, jpeg_bytes = resize_for_ocr(frame, max_size_kb=900)
+        jpeg_bytes = resize_for_ocr(img, max_size_kb=900)
         with open(image_path, 'wb') as f:
             f.write(jpeg_bytes)
         
