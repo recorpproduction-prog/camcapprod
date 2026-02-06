@@ -34,7 +34,26 @@ Should be: `pip install -r requirements_web.txt`
 ### 6. Start Command
 Should be: `gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 300 web_app:app`
 
-### 7. No Keys Needed for Basic Run
+### 7. Check Google (Sheets + Drive)
+Open: `https://YOUR-APP.onrender.com/api/diagnostics`
+
+You should see something like:
+```json
+{
+  "sheets_connected": true,
+  "sheets_id_set": true,
+  "drive_creds_available": true,
+  "drive_root_folder_id_set": true,
+  "ocr_ready": true
+}
+```
+
+- If **sheets_connected** is false: check `GOOGLE_SHEET_ID` and `GOOGLE_CREDENTIALS_JSON`. The Sheet must be shared with the service account email.
+- If **drive_creds_available** is false: same credentials (one JSON covers both Sheets and Drive).
+- If **drive_root_folder_id_set** is false: add `GOOGLE_DRIVE_ROOT_FOLDER_ID` with your Drive folder ID.
+- After a capture, if images/Sheet still empty: check the status text on the capture page (it now shows Drive/Sheet errors). Also check Render **Logs** for `[WARN] Drive upload` or `[ERROR] Sheets`.
+
+### 8. No Keys Needed for Basic Run
 The app works without Google Sheets:
 - OCR uses OCR.space (free, no key)
 - Records are saved locally (ephemeral on Render)

@@ -161,6 +161,22 @@ def health():
     """Quick health check - use this to verify deploy"""
     return jsonify({'status': 'ok', 'ocr': ocr is not None, 'sheets': sheets is not None})
 
+@app.route('/api/diagnostics')
+@app.route('/diagnostics')  # Simpler URL in case /api/ has issues
+def diagnostics():
+    """Check Google config (no secrets). Use this to see why Sheets/Drive might not work."""
+    has_creds = bool(
+        (CONFIG.get('credentials_json') and CONFIG['credentials_json'].strip()) or
+        (CONFIG.get('credentials_file') and os.path.exists(CONFIG.get('credentials_file', '')))
+    )
+    return jsonify({
+        'sheets_connected': sheets is not None,
+        'sheets_id_set': bool(CONFIG.get('sheets_id')),
+        'drive_creds_available': has_creds,
+        'drive_root_folder_id_set': bool(CONFIG.get('drive_root_folder_id')),
+        'ocr_ready': ocr is not None,
+    })
+
 def _render_page(template_name, embedded_html):
     """Render template from file if exists, else use embedded HTML (for when templates/ not in repo)."""
     try:
@@ -248,6 +264,7 @@ def submit_ticket():
         
         # Upload to Google Drive (date folder YYYY-MM-DD, 7am-7am blocks)
         image_drive_url = None
+        drive_error_msg = None
         creds_available = (
             (CONFIG.get('credentials_json') and CONFIG['credentials_json'].strip()) or
             (CONFIG.get('credentials_file') and os.path.exists(CONFIG.get('credentials_file', '')))
@@ -265,8 +282,10 @@ def submit_ticket():
                     image_drive_url = drive_url
                     print(f"[OK] Uploaded to Drive folder {get_date_folder_name()}")
                 elif drive_err:
+                    drive_error_msg = str(drive_err)
                     print(f"[WARN] Drive upload skipped: {drive_err}")
             except Exception as e:
+                drive_error_msg = str(e)
                 print(f"[WARN] Drive upload error: {e}")
 
         # Create record - use Drive URL for display when available
@@ -318,21 +337,24 @@ def submit_ticket():
             json.dump(record, f, indent=2)
         print(f"[OK] Saved locally: {record_file.name}")
         
+        # Build response with diagnostics so user can see what worked/failed
+        resp = {
+            'success': True,
+            'row_num': result.get('row_num'),
+            'record': record,
+            'drive_uploaded': bool(image_drive_url),
+            'sheets_submitted': result.get('success', False),
+        }
         if result.get('success'):
-            return jsonify({
-                'success': True,
-                'row_num': result.get('row_num'),
-                'record': record,
-                'message': 'Submitted to Google Sheets successfully'
-            })
+            resp['message'] = 'Submitted to Google Sheets successfully'
+            if image_drive_url:
+                resp['message'] += '; image uploaded to Drive.'
         else:
-            return jsonify({
-                'success': True,  # Still success if saved locally
-                'row_num': None,
-                'record': record,
-                'message': 'Saved locally (Google Sheets not connected)',
-                'warning': result.get('error', 'Sheets not configured')
-            })
+            resp['message'] = 'Saved locally.'
+            resp['sheets_error'] = result.get('error', 'Sheets not connected')
+        if drive_error_msg:
+            resp['drive_error'] = drive_error_msg
+        return jsonify(resp)
             
     except Exception as e:
         import traceback

@@ -30,9 +30,9 @@ def get_credentials(credentials_file=None, credentials_json=None):
     from google.oauth2.service_account import Credentials
     scope = ['https://www.googleapis.com/auth/drive']  # Create folders, upload, set permissions
     if credentials_json and credentials_json.strip():
-        import tempfile
         import json as _json
-        data = _json.loads(credentials_json.strip())
+        raw = credentials_json.strip()
+        data = _json.loads(raw)
         creds = Credentials.from_service_account_info(data, scopes=scope)
         return creds
     if credentials_file and os.path.exists(credentials_file):
