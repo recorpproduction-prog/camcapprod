@@ -32,3 +32,6 @@ gunicorn>=21.0.0
 # Optional: For better image processing
 scikit-image>=0.21.0
 
+# PDF reports
+reportlab>=4.0.0
+

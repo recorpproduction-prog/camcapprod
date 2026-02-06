@@ -3,7 +3,7 @@ Pallet Ticket Capture - Web Application
 Complete rewrite for online deployment
 """
 
-from flask import Flask, render_template, render_template_string, request, jsonify, send_from_directory
+from flask import Flask, render_template, render_template_string, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 from jinja2 import TemplateNotFound
 import os
@@ -35,10 +35,11 @@ app = Flask(__name__, static_folder=str(_BASE / 'static'), template_folder=str(_
 
 # Embedded templates - used when templates/ folder is not deployed (e.g. missing from repo)
 try:
-    from embedded_templates import CAPTURE_HTML, REVIEW_HTML
+    from embedded_templates import CAPTURE_HTML, REVIEW_HTML, REPORT_HTML
     _HAS_EMBEDDED = True
 except ImportError:
     _HAS_EMBEDDED = False
+    REPORT_HTML = None
 CORS(app)
 
 # Return JSON for 500 errors so we can see the actual error message
@@ -60,6 +61,12 @@ CONFIG = {
     'credentials_file': os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json'),
     'credentials_json': os.getenv('GOOGLE_CREDENTIALS_JSON'),  # Alt: paste JSON as env var
     'drive_root_folder_id': os.getenv('GOOGLE_DRIVE_ROOT_FOLDER_ID'),  # Optional: date folders created inside this
+    'report_email_to': os.getenv('REPORT_EMAIL_TO', 'recropproduction@gmail.com'),  # Comma-separated
+    'smtp_host': os.getenv('SMTP_HOST'),
+    'smtp_port': os.getenv('SMTP_PORT', '587'),
+    'smtp_user': os.getenv('SMTP_USER'),
+    'smtp_password': os.getenv('SMTP_PASSWORD'),
+    'report_secret': os.getenv('REPORT_SECRET'),  # Optional: require ?secret=X to trigger auto-report
 }
 
 # Initialize components
@@ -105,7 +112,10 @@ def init_components():
                 sheets.connect(CONFIG['credentials_file'])
             print(f"[OK] Google Sheets connected: {CONFIG['sheets_id']}")
         except Exception as e:
-            print(f"[ERROR] Sheets connection error: {e}")
+            err_msg = str(e) or repr(e)
+            print(f"[ERROR] Sheets connection error: {err_msg}")
+            import traceback
+            traceback.print_exc()
             sheets = None
     else:
         print("[INFO] Google Sheets not configured - records will be saved locally only")
@@ -437,6 +447,82 @@ def reject_record():
 def serve_image(filename):
     """Serve captured images"""
     return send_from_directory(CONFIG['images_folder'], filename)
+
+@app.route('/report')
+def report_page():
+    """Daily report page - generate PDF with images"""
+    return _render_page('report.html', REPORT_HTML if _HAS_EMBEDDED else None)
+
+@app.route('/api/generate-report')
+def generate_report():
+    """Generate PDF report of last 24h captures. ?cleanup=1 to delete images older than 24h after."""
+    try:
+        from report_generator import get_records_last_24h, generate_pdf, cleanup_images_older_than_hours
+        records_dir = Path('local_records')
+        images_dir = Path(CONFIG['images_folder'])
+        # Use local records only - those have local image files for PDF embedding
+        items = get_records_last_24h(str(records_dir), str(images_dir))
+        buf = io.BytesIO()
+        generate_pdf(items, buf)
+        buf.seek(0)
+        do_cleanup = request.args.get('cleanup', '').lower() in ('1', 'true', 'yes')
+        if do_cleanup:
+            deleted = cleanup_images_older_than_hours(str(images_dir), 24)
+            print(f"[OK] Cleaned up {deleted} images older than 24h")
+        filename = f"pallet_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=filename)
+    except ImportError as e:
+        return jsonify({'error': 'reportlab not installed', 'detail': str(e)}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auto-report')
+def auto_report():
+    """Generate PDF report, email it, optionally clean up. Call daily via cron (e.g. cron-job.org)."""
+    secret = request.args.get('secret')
+    if CONFIG.get('report_secret') and secret != CONFIG['report_secret']:
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        from report_generator import get_records_last_24h, generate_pdf, send_report_email, cleanup_images_older_than_hours
+        records_dir = Path('local_records')
+        images_dir = Path(CONFIG['images_folder'])
+        items = get_records_last_24h(str(records_dir), str(images_dir))
+        buf = io.BytesIO()
+        generate_pdf(items, buf)
+        buf.seek(0)
+        pdf_bytes = buf.getvalue()
+
+        to_emails = CONFIG.get('report_email_to', '').strip()
+        if not to_emails:
+            to_emails = 'recropproduction@gmail.com'
+        success, err = send_report_email(
+            pdf_bytes, to_emails,
+            smtp_host=CONFIG.get('smtp_host'),
+            smtp_port=CONFIG.get('smtp_port'),
+            smtp_user=CONFIG.get('smtp_user'),
+            smtp_password=CONFIG.get('smtp_password'),
+        )
+        if not success:
+            return jsonify({'error': f'Email failed: {err}', 'pdf_generated': True}), 500
+
+        do_cleanup = request.args.get('cleanup', '1').lower() in ('1', 'true', 'yes')
+        deleted = 0
+        if do_cleanup:
+            deleted = cleanup_images_older_than_hours(str(images_dir), 24)
+        emails_list = [e.strip() for e in to_emails.split(',')] if isinstance(to_emails, str) else to_emails
+        return jsonify({
+            'success': True,
+            'records': len(items),
+            'emailed_to': emails_list,
+            'images_cleaned': deleted,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     import webbrowser

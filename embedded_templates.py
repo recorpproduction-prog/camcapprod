@@ -70,6 +70,7 @@ CAPTURE_HTML = r'''<!DOCTYPE html>
             <button id="startBtn" class="btn-start" onclick="startCamera()">START CAMERA</button>
             <button id="stopBtn" class="btn-stop" onclick="stopCamera()" style="display:none;">STOP CAMERA</button>
             <button class="btn-secondary" onclick="window.open('/review','_blank')">Review Page</button>
+            <button class="btn-secondary" onclick="window.open('/report','_blank')">Daily Report</button>
             <button id="testModeBtn" class="btn-test" onclick="toggleTestMode()">Test Mode: OFF</button>
         </div>
         <div class="section">
@@ -164,5 +165,38 @@ REVIEW_HTML = r'''<!DOCTYPE html>
     function approveRecord(){if(!currentRecord||!currentRecord._rowNumber){alert('Row number not available');return;}fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row_number:currentRecord._rowNumber})}).then(function(r){return r.json();}).then(function(d){if(d.success){alert('Approved!');closeReview();loadRecords();}else alert('Error: '+d.error);}).catch(function(e){alert('Error: '+e.message);});}
     function confirmReject(){var reason=document.getElementById('rejectReason').value.trim();if(!reason){alert('Enter reason');return;}if(!currentRecord||!currentRecord._rowNumber){alert('Row number not available');return;}fetch('/api/reject',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row_number:currentRecord._rowNumber,reason:reason})}).then(function(r){return r.json();}).then(function(d){if(d.success){alert('Rejected!');closeReview();loadRecords();}else alert('Error: '+d.error);}).catch(function(e){alert('Error: '+e.message);});}
     </script>
+</body>
+</html>'''
+
+REPORT_HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Report - Pallet Ticket Capture</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:20px;}
+        .header{background:linear-gradient(135deg,#673AB7 0%,#512DA8 100%);color:white;padding:25px;border-radius:10px;margin-bottom:20px;text-align:center;}
+        .header h1{font-size:24px;margin-bottom:10px;}
+        .section{background:white;border-radius:10px;padding:25px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.1);max-width:600px;margin-left:auto;margin-right:auto;}
+        .section p{margin:15px 0;color:#555;line-height:1.6;}
+        .btn{display:inline-block;padding:15px 30px;font-size:16px;font-weight:bold;border:none;border-radius:8px;cursor:pointer;text-decoration:none;color:white;margin:10px 5px 10px 0;}
+        .btn-primary{background:#673AB7;}
+        .btn-primary:hover{background:#5E35B1;}
+        .btn-cleanup{background:#F44336;}
+        .btn-back{background:#757575;}
+        .note{background:#FFF3E0;border-left:4px solid #FF9800;padding:15px;margin:20px 0;border-radius:6px;font-size:14px;}
+    </style>
+</head>
+<body>
+    <div class="header"><h1>Daily Compliance Report</h1><p>Summary first (pallets, quantity) then images. Auto-emailed to configured addresses.</p></div>
+    <div class="section">
+        <p>Generate a PDF report of all captured labels from the last 24 hours. Each record includes label data and image.</p>
+        <a href="/api/generate-report" class="btn btn-primary" download>Generate PDF Report (last 24h)</a>
+        <a href="/api/generate-report?cleanup=1" class="btn btn-cleanup" download onclick="return confirm('Generate report AND delete images older than 24h?');">Generate + Clean Up Old Images</a>
+        <a href="/" class="btn btn-back">Back to Capture</a>
+        <div class="note"><strong>Compliance:</strong> Download the PDF first. Store it for records. "Clean Up" removes local images older than 24h after generating.</div>
+    </div>
 </body>
 </html>'''

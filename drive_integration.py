@@ -67,10 +67,10 @@ def upload_to_drive(
         service = build('drive', 'v3', credentials=creds)
         folder_name = get_date_folder_name()
 
-        # Find or create date folder
+        # Find or create date folder (supportsAllDrives=True for Shared Drives - fixes quota error)
         parent_id = root_folder_id or 'root'
-        query = f"name='{folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+        list_params = {'q': f"name='{folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false", 'spaces': 'drive', 'fields': 'files(id, name)', 'supportsAllDrives': True, 'includeItemsFromAllDrives': True}
+        results = service.files().list(**list_params).execute()
         folders = results.get('files', [])
 
         if folders:
@@ -82,29 +82,25 @@ def upload_to_drive(
             }
             if root_folder_id:
                 folder_metadata['parents'] = [root_folder_id]
-            folder = service.files().create(body=folder_metadata, fields='id').execute()
+            create_params = {'body': folder_metadata, 'fields': 'id', 'supportsAllDrives': True}
+            folder = service.files().create(**create_params).execute()
             folder_id = folder['id']
 
         # Check if file already exists (avoid duplicates by filename)
         file_query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
-        existing = service.files().list(q=file_query, spaces='drive', fields='files(id)').execute()
+        existing = service.files().list(q=file_query, spaces='drive', fields='files(id)', supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
         if existing.get('files'):
             file_id = existing['files'][0]['id']
         else:
-            file_metadata = {
-                'name': filename,
-                'parents': [folder_id]
-            }
+            file_metadata = {'name': filename, 'parents': [folder_id]}
             media = MediaFileUpload(file_path, mimetype='image/jpeg', resumable=True)
-            file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+            create_params = {'body': file_metadata, 'media_body': media, 'fields': 'id', 'supportsAllDrives': True}
+            file = service.files().create(**create_params).execute()
             file_id = file['id']
 
         # Make viewable by anyone with link
         try:
-            service.permissions().create(
-                fileId=file_id,
-                body={'type': 'anyone', 'role': 'reader'}
-            ).execute()
+            service.permissions().create(fileId=file_id, body={'type': 'anyone', 'role': 'reader'}, supportsAllDrives=True).execute()
         except HttpError as e:
             if 'insufficient' in str(e).lower() or '403' in str(e):
                 pass  # May already have permission
