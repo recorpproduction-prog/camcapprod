@@ -302,7 +302,7 @@ def submit_ticket():
         display_url = image_drive_url or f'/captured_images/{filename}'
         record = {
             'timestamp': timestamp.isoformat(),
-            'status': 'PENDING',
+            'status': 'CAPTURED',
             'operator': 'Web-User',
             'image_path': display_url,
             'image_drive_url': image_drive_url or '',
@@ -329,11 +329,11 @@ def submit_ticket():
                 'record': record
             }), 200
         
-        # Submit to Google Sheets
+        # Submit to Google Sheets (directly to APPROVED_RECORDS as CAPTURED - no review)
         result = {'success': False}
         if sheets:
             try:
-                result = sheets.add_pending_record(record)
+                result = sheets.add_captured_record(record)
                 if result.get('success'):
                     print(f"[OK] Submitted to Google Sheets (Row {result.get('row_num')})")
             except Exception as e:
@@ -362,8 +362,7 @@ def submit_ticket():
         else:
             resp['message'] = 'Saved locally.'
             resp['sheets_error'] = result.get('error', 'Sheets not connected')
-        if drive_error_msg:
-            resp['drive_error'] = drive_error_msg
+        # Do not expose Drive errors to user (e.g. service account quota - requires Shared Drive)
         return jsonify(resp)
             
     except Exception as e:
@@ -386,18 +385,18 @@ def get_pending():
             except Exception as e:
                 print(f"[ERROR] Sheets error: {e}")
         
-        # Also check local records
+        # Also check local records (CAPTURED or legacy PENDING)
         records_dir = Path('local_records')
         if records_dir.exists():
             for json_file in records_dir.glob('record_*.json'):
                 try:
                     with open(json_file, 'r') as f:
                         record = json.load(f)
-                        if record.get('status') == 'PENDING':
-                            # Avoid duplicates
+                        st = record.get('status', '')
+                        if st in ('CAPTURED', 'PENDING'):
                             if not any(r.get('timestamp') == record.get('timestamp') for r in records):
                                 records.append(record)
-                except:
+                except Exception:
                     pass
 
         # Ensure image_path is set for display (prefer Drive URL)

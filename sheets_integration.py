@@ -107,39 +107,40 @@ class SheetsIntegration:
     
     def add_pending_record(self, record):
         """
-        Add record to PENDING_REVIEW sheet
-        
-        Args:
-            record: Dictionary with record data
-            
-        Returns:
-            Dictionary with 'success' and optional 'row_num' or 'error'
+        Add record to PENDING_REVIEW sheet (legacy - for records under review)
         """
         try:
             if not self.spreadsheet:
                 return {'success': False, 'error': 'No spreadsheet connected'}
-            
             sheet = self.get_or_create_sheet('PENDING_REVIEW')
-            
-            # Prepare row data in column order
-            row_data = []
-            for col in COLUMNS:
-                value = record.get(col, '')
-                row_data.append(str(value) if value is not None else '')
-            
-            # Append row
+            row_data = self._record_to_row(record)
             sheet.append_row(row_data)
-            
-            # Get row number
-            row_num = len(sheet.get_all_values())
-            
-            return {'success': True, 'row_num': row_num}
-            
+            return {'success': True, 'row_num': len(sheet.get_all_values())}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    def add_captured_record(self, record):
+        """
+        Add record directly to APPROVED_RECORDS with status CAPTURED (no review required).
+        """
+        try:
+            if not self.spreadsheet:
+                return {'success': False, 'error': 'No spreadsheet connected'}
+            record = dict(record)
+            record['status'] = 'CAPTURED'
+            sheet = self.get_or_create_sheet('APPROVED_RECORDS')
+            row_data = self._record_to_row(record)
+            sheet.append_row(row_data)
+            return {'success': True, 'row_num': len(sheet.get_all_values())}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _record_to_row(self, record):
+        """Prepare record as row data in column order."""
+        return [str(record.get(col, '')) if record.get(col) is not None else '' for col in COLUMNS]
     
     def sscc_exists(self, sscc):
-        """Check if SSCC (pallet ID) already exists in PENDING_REVIEW or APPROVED_RECORDS"""
+        """Check if SSCC (pallet ID) already exists in PENDING_REVIEW or APPROVED_RECORDS."""
         if not sscc or not self.spreadsheet:
             return False
         try:
@@ -160,28 +161,49 @@ class SheetsIntegration:
             return False
     
     def get_pending_records(self):
-        """Get all pending records with _rowNumber for approve/reject"""
+        """Get all records for display: CAPTURED/APPROVED from APPROVED_RECORDS, PENDING from PENDING_REVIEW."""
         try:
             if not self.spreadsheet:
                 return []
-            
-            sheet = self.get_or_create_sheet('PENDING_REVIEW')
-            all_values = sheet.get_all_values()
-            if len(all_values) < 2:
-                return []
-            
-            header = all_values[0]
-            pending = []
-            for i in range(1, len(all_values)):
-                row = all_values[i]
-                record = dict(zip(header, row + [''] * (len(header) - len(row))))
-                if str(record.get('status', '')).upper() == 'PENDING':
-                    record['_rowNumber'] = i + 1  # 1-based row in sheet
-                    pending.append(record)
-            return pending
-            
+
+            def _records_from_sheet(sheet_name, status_filter=None):
+                out = []
+                try:
+                    sheet = self.spreadsheet.worksheet(sheet_name)
+                except gspread.exceptions.WorksheetNotFound:
+                    return []
+                all_values = sheet.get_all_values()
+                if len(all_values) < 2:
+                    return []
+                header = all_values[0]
+                for i in range(1, len(all_values)):
+                    row = all_values[i]
+                    rec = dict(zip(header, row + [''] * (len(header) - len(row))))
+                    if status_filter is None or str(rec.get('status', '')).upper() in status_filter:
+                        if sheet_name == 'PENDING_REVIEW':
+                            rec['_rowNumber'] = i + 1
+                            rec['_sheetSource'] = 'PENDING_REVIEW'
+                        else:
+                            rec['_sheetSource'] = 'APPROVED_RECORDS'
+                        out.append(rec)
+                return out
+
+            # Captured/approved records (for display)
+            records = _records_from_sheet('APPROVED_RECORDS', ('CAPTURED', 'APPROVED'))
+            # Legacy pending (if any)
+            records.extend(_records_from_sheet('PENDING_REVIEW', ('PENDING',)))
+            # Sort by timestamp descending (newest first)
+            def _ts(r):
+                try:
+                    s = (r.get('timestamp') or '')[:19].replace('Z', '')
+                    return datetime.fromisoformat(s) if s else datetime.min
+                except Exception:
+                    return datetime.min
+            records.sort(key=_ts, reverse=True)
+            return records
+
         except Exception as e:
-            print(f"Error getting pending records: {e}")
+            print(f"Error getting records: {e}")
             return []
     
     def approve_record(self, row_number):

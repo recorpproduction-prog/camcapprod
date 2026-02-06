@@ -23,17 +23,52 @@ def _parse_ts(ts):
         return None
 
 
-def _resolve_image_path(rec, images_dir):
-    """Get local image path from record."""
-    img_path = rec.get("image_path", "")
-    if not img_path:
+def _resolve_image_path(rec, images_dir, record_filename=None):
+    """Get local image path from record. Uses image_path field, or derives from record file/timestamp."""
+    images_path = Path(images_dir).resolve()
+    if not images_path.exists():
         return None
-    if "/captured_images/" in img_path or "captured_images" in img_path:
-        fname = img_path.split("/")[-1] if "/" in img_path else Path(img_path).name
-        local_path = Path(images_dir) / fname
-    else:
-        local_path = Path(images_dir) / Path(img_path).name
-    return str(local_path) if local_path.exists() else None
+
+    def _try_path(p):
+        if p and p.exists():
+            return str(p)
+        return None
+
+    # 1. Try image_path from record (e.g. /captured_images/pallet_xxx.jpg or Drive URL = skip)
+    img_path = rec.get("image_path", "")
+    if img_path and not img_path.startswith("http"):
+        fname = Path(img_path).name
+        cand = images_path / fname
+        r = _try_path(cand)
+        if r:
+            return r
+        # Try without extension (in case stored as .jpeg vs .jpg)
+        stem = Path(fname).stem
+        for ext in (".jpg", ".jpeg", ".png"):
+            r = _try_path(images_path / (stem + ext))
+            if r:
+                return r
+
+    # 2. Fallback: derive from record filename (record_20260130_143022.json -> pallet_20260130_143022.jpg)
+    if record_filename:
+        stem = Path(record_filename).stem
+        if stem.startswith("record_"):
+            base = stem.replace("record_", "pallet_", 1)
+            for ext in (".jpg", ".jpeg", ".png"):
+                r = _try_path(images_path / (base + ext))
+                if r:
+                    return r
+
+    # 3. Fallback: derive from timestamp
+    dt = _parse_ts(rec.get("timestamp", ""))
+    if dt:
+        base = "pallet_" + dt.strftime("%Y%m%d_%H%M%S")
+        for ext in (".jpg", ".jpeg", ".png"):
+            r = _try_path(images_path / (base + ext))
+            if r:
+                return r
+
+    return None
 
 
 def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt):
@@ -50,7 +85,7 @@ def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt):
                 dt = _parse_ts(rec.get("timestamp", ""))
                 if dt is None or dt < start_dt or dt >= end_dt:
                     continue
-                local_path = _resolve_image_path(rec, images_dir)
+                local_path = _resolve_image_path(rec, images_dir, record_filename=f.name)
                 results.append({"record": rec, "image_path": local_path})
             except Exception:
                 pass
@@ -167,7 +202,7 @@ def generate_pdf(records_with_images, output_buffer):
     y -= line_height
     c.drawString(margin, y, f"Unique items: {summary['unique_items']}")
     y -= line_height
-    c.drawString(margin, y, f"Period: {summary['date_from']} to {summary['date_to']}")
+    c.drawString(margin, y, f"Period (by capture time): {summary['date_from']} to {summary['date_to']}")
     y -= line_height * 1.5
 
     if summary["item_list"]:
@@ -213,19 +248,27 @@ def generate_pdf(records_with_images, output_buffer):
 
         # Left column: text
         y_start = y
-        ts = rec.get("timestamp", "N/A")
-        if len(ts) > 25:
-            ts = ts[:25]
+        ts_raw = rec.get("timestamp", "")
+        ts_display = ts_raw[:19] if ts_raw and len(ts_raw) > 19 else (ts_raw or "N/A")
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, f"#{i+1} - {ts}")
+        c.drawString(margin, y, f"#{i+1} - Captured: {ts_display}")
         y -= line_height
 
-        fields = ["sscc", "item_number", "item_description", "batch_no", "quantity", "date", "time", "handwritten_number"]
+        fields = [
+            ("sscc", "sscc"),
+            ("item_number", "item_number"),
+            ("item_description", "item_description"),
+            ("batch_no", "batch_no"),
+            ("quantity", "quantity"),
+            ("label_date", "date"),
+            ("label_time", "time"),
+            ("handwritten_number", "handwritten_number"),
+        ]
         c.setFont("Helvetica", 9)
-        for f in fields:
-            v = rec.get(f, "")
+        for label, key in fields:
+            v = rec.get(key, "")
             if v:
-                text = f"{f}: {str(v)[:50]}"
+                text = f"{label}: {str(v)[:50]}"
                 c.drawString(margin, y, text)
                 y -= line_height
         y -= line_height
