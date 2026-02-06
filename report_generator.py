@@ -96,7 +96,6 @@ def generate_pdf(records_with_images, output_buffer):
     page_w, page_h = A4
     margin = 15 * mm
     line_height = 5 * mm
-    img_height = 50 * mm
 
     if not records_with_images:
         y = page_h - margin
@@ -148,18 +147,23 @@ def generate_pdf(records_with_images, output_buffer):
     c.drawString(margin, y, "--- Detail with images follows ---")
     c.showPage()
 
-    # --- DETAIL PAGES: Each label with image ---
+    # --- DETAIL PAGES: Text on left, image on right ---
+    text_col_width = 75 * mm
+    img_col_start = margin + text_col_width + 8 * mm
+    img_width = 60 * mm
+    img_height_side = 70 * mm
     y = page_h - margin
     for i, item in enumerate(records_with_images):
         rec = item["record"]
         img_path = item.get("image_path")
 
-        # Check if we need a new page
-        needed = line_height * 6 + (img_height if img_path else 0)
-        if y - needed < margin:
+        # Check if we need a new page (need space for image height)
+        if y - img_height_side < margin:
             c.showPage()
             y = page_h - margin
 
+        # Left column: text
+        y_start = y
         ts = rec.get("timestamp", "N/A")
         if len(ts) > 25:
             ts = ts[:25]
@@ -167,28 +171,26 @@ def generate_pdf(records_with_images, output_buffer):
         c.drawString(margin, y, f"#{i+1} - {ts}")
         y -= line_height
 
-        fields = ["sscc", "item_number", "item_description", "batch_no", "quantity", "date", "time"]
+        fields = ["sscc", "item_number", "item_description", "batch_no", "quantity", "date", "time", "handwritten_number"]
         c.setFont("Helvetica", 9)
         for f in fields:
             v = rec.get(f, "")
             if v:
-                text = f"{f}: {str(v)[:60]}"
-                c.drawString(margin + 5 * mm, y, text)
+                text = f"{f}: {str(v)[:50]}"
+                c.drawString(margin, y, text)
                 y -= line_height
         y -= line_height
 
+        # Right column: image
         if img_path and Path(img_path).exists():
             try:
-                c.drawImage(img_path, margin, y - img_height, width=60 * mm, height=img_height)
-                y -= img_height + line_height
+                c.drawImage(img_path, img_col_start, y_start - img_height_side, width=img_width, height=img_height_side)
             except Exception:
-                c.drawString(margin, y, "(Image unavailable)")
-                y -= line_height
+                c.drawString(img_col_start, y_start - line_height, "(Image unavailable)")
         else:
-            c.drawString(margin, y, "(No local image)")
-            y -= line_height
+            c.drawString(img_col_start, y_start - line_height, "(No local image)")
 
-        y -= line_height
+        y -= line_height * 1.5  # Space before next record
 
     c.save()
 
