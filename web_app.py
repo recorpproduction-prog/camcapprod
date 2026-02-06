@@ -10,7 +10,7 @@ import os
 import json
 import base64
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from PIL import Image
 import numpy as np
@@ -453,22 +453,66 @@ def report_page():
     """Daily report page - generate PDF with images"""
     return _render_page('report.html', REPORT_HTML if _HAS_EMBEDDED else None)
 
+def _parse_report_range():
+    """Parse from_date, from_time, to_date, to_time from query params. Returns (start_dt, end_dt) or None for default."""
+    from report_generator import get_7am_7am_window
+    from datetime import time as dt_time
+
+    from_date = request.args.get('from_date') or request.args.get('fromDate')
+    from_time = request.args.get('from_time') or request.args.get('fromTime', '07:00')
+    to_date = request.args.get('to_date') or request.args.get('toDate')
+    to_time = request.args.get('to_time') or request.args.get('toTime', '07:00')
+
+    if not from_date or not to_date:
+        return None
+
+    def parse_time(s):
+        parts = str(s).strip().split(':')
+        h = int(parts[0]) if parts else 0
+        m = int(parts[1]) if len(parts) > 1 else 0
+        return dt_time(h, m, 0)
+
+    try:
+        start_d = datetime.strptime(from_date.strip(), '%Y-%m-%d').date()
+        end_d = datetime.strptime(to_date.strip(), '%Y-%m-%d').date()
+        start_t = parse_time(from_time)
+        end_t = parse_time(to_time)
+        start_dt = datetime.combine(start_d, start_t)
+        end_dt = datetime.combine(end_d, end_t)
+        if end_dt <= start_dt:
+            end_dt += timedelta(days=1)  # Assume 24h block
+        return start_dt, end_dt
+    except (ValueError, TypeError):
+        return None
+
+
 @app.route('/api/generate-report')
 def generate_report():
-    """Generate PDF report of last 24h captures. ?cleanup=1 to delete images older than 24h after."""
+    """Generate PDF report. Uses from_date, from_time, to_date, to_time for custom range (7am-7am default). ?cleanup=1 deletes images older than 7 days."""
     try:
-        from report_generator import get_records_last_24h, generate_pdf, cleanup_images_older_than_hours
+        from report_generator import (
+            get_records_last_24h, get_records_in_range,
+            generate_pdf, cleanup_images_older_than_days
+        )
         records_dir = Path('local_records')
         images_dir = Path(CONFIG['images_folder'])
-        # Use local records only - those have local image files for PDF embedding
-        items = get_records_last_24h(str(records_dir), str(images_dir))
+
+        start_end = _parse_report_range()
+        if start_end:
+            start_dt, end_dt = start_end
+            items = get_records_in_range(str(records_dir), str(images_dir), start_dt, end_dt)
+        else:
+            items = get_records_last_24h(str(records_dir), str(images_dir))
+
         buf = io.BytesIO()
         generate_pdf(items, buf)
         buf.seek(0)
+
         do_cleanup = request.args.get('cleanup', '').lower() in ('1', 'true', 'yes')
         if do_cleanup:
-            deleted = cleanup_images_older_than_hours(str(images_dir), 24)
-            print(f"[OK] Cleaned up {deleted} images older than 24h")
+            deleted = cleanup_images_older_than_days(str(images_dir), days=7)
+            print(f"[OK] Cleaned up {deleted} images older than 7 days")
+
         filename = f"pallet_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
         return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=filename)
     except ImportError as e:
@@ -481,12 +525,12 @@ def generate_report():
 
 @app.route('/api/auto-report')
 def auto_report():
-    """Generate PDF report, email it, optionally clean up. Call daily via cron (e.g. cron-job.org)."""
+    """Generate PDF report (7am-7am window), email it, optionally clean up. Call Tue-Fri 7am via cron."""
     secret = request.args.get('secret')
     if CONFIG.get('report_secret') and secret != CONFIG['report_secret']:
         return jsonify({'error': 'Unauthorized'}), 401
     try:
-        from report_generator import get_records_last_24h, generate_pdf, send_report_email, cleanup_images_older_than_hours
+        from report_generator import get_records_last_24h, generate_pdf, send_report_email, cleanup_images_older_than_days
         records_dir = Path('local_records')
         images_dir = Path(CONFIG['images_folder'])
         items = get_records_last_24h(str(records_dir), str(images_dir))
@@ -511,7 +555,7 @@ def auto_report():
         do_cleanup = request.args.get('cleanup', '1').lower() in ('1', 'true', 'yes')
         deleted = 0
         if do_cleanup:
-            deleted = cleanup_images_older_than_hours(str(images_dir), 24)
+            deleted = cleanup_images_older_than_days(str(images_dir), days=7)
         emails_list = [e.strip() for e in to_emails.split(',')] if isinstance(to_emails, str) else to_emails
         return jsonify({
             'success': True,

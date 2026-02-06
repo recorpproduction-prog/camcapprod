@@ -84,6 +84,9 @@ class DataParser:
             if field_name == 'time' and value and not self._valid_time(value):
                 value = ''
                 conf_level = 'low'
+            if field_name == 'quantity' and value and not self._valid_quantity(value):
+                value = ''
+                conf_level = 'low'
             parsed[field_name] = value
             confidence[field_name] = conf_level
             if not value:
@@ -115,17 +118,17 @@ class DataParser:
                 confidence['batch_no'] = 'high'
             elif 'QUANTITY' in key and not parsed.get('quantity'):
                 m = re.search(r'(\d+(?:\.\d+)?)', value)
-                if m:
+                if m and self._valid_quantity(m.group(1)):
                     parsed['quantity'] = m.group(1)
                     confidence['quantity'] = 'high'
             elif key == 'DATE' and not parsed.get('date'):
                 m = re.search(r'(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})', value)
-                if m and not re.search(r'\d{1,2}:\d{2}', value):
+                if m and not re.search(r'\d{1,2}:\d{2}', value) and self._valid_date(m.group(1)):
                     parsed['date'] = m.group(1)
                     confidence['date'] = 'high'
             elif key == 'TIME' and not parsed.get('time'):
                 m = re.search(r'(\d{1,2}:\d{2}(?::\d{2})?)', value)
-                if m and not re.search(r'\d{1,2}/\d{1,2}/\d{2,4}', value):
+                if m and not re.search(r'\d{1,2}/\d{1,2}/\d{2,4}', value) and self._valid_time(m.group(1)):
                     parsed['time'] = m.group(1)
                     confidence['time'] = 'high'
             elif 'CUSTOMER ITEM NUMBER' in key and not parsed.get('customer_item_number'):
@@ -261,6 +264,15 @@ class DataParser:
             return False
         return bool(re.search(r'\d{1,2}:\d{2}', val))
     
+    def _valid_quantity(self, value):
+        """Quantity must be numeric only - reject DATE, TIME, or other labels"""
+        if not value:
+            return False
+        val = str(value).strip().upper()
+        if val in ('DATE', 'TIME', 'N/A', 'EA', 'ES'):
+            return False
+        return bool(re.match(r'^\d+(\.\d+)?$', val))
+
     def _valid_item_number(self, value):
         """Reject units (ea, es, etc.) and require proper item code format"""
         if not value or value.upper() == 'N/A':

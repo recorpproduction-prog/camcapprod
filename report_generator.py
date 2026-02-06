@@ -1,58 +1,98 @@
 """
 PDF Report Generator - Compliance reports with images
 Generates a daily PDF combining all captured labels with their images.
+Reports use 7am-7am 24hr windows. Images retained for 7 days.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from pathlib import Path
 import io
 import json
 
 
-def get_records_last_24h(local_records_dir, images_dir, sheets_records=None):
-    """sheets_records: optional list from Sheets (may not have local images)"""
+def _parse_ts(ts):
+    """Parse timestamp string to naive datetime."""
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
+
+def _resolve_image_path(rec, images_dir):
+    """Get local image path from record."""
+    img_path = rec.get("image_path", "")
+    if not img_path:
+        return None
+    if "/captured_images/" in img_path or "captured_images" in img_path:
+        fname = img_path.split("/")[-1] if "/" in img_path else Path(img_path).name
+        local_path = Path(images_dir) / fname
+    else:
+        local_path = Path(images_dir) / Path(img_path).name
+    return str(local_path) if local_path.exists() else None
+
+
+def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt):
     """
-    Get all records from the last 24 hours.
+    Get records with timestamps in [start_dt, end_dt).
     Returns list of dicts with: record, image_path (local path or None)
     """
-    cutoff = datetime.now() - timedelta(hours=24)
     results = []
-
-    # From local records
     if Path(local_records_dir).exists():
         for f in Path(local_records_dir).glob("record_*.json"):
             try:
                 with open(f, "r") as fp:
                     rec = json.load(fp)
-                ts = rec.get("timestamp", "")
-                if ts:
-                    try:
-                        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                        if dt.tzinfo:
-                            dt = dt.replace(tzinfo=None)  # naive compare
-                    except Exception:
-                        continue
-                    if dt < cutoff:
-                        continue
-                img_path = rec.get("image_path", "")
-                if img_path and img_path.startswith("/captured_images/"):
-                    local_path = Path(images_dir) / img_path.split("/")[-1]
-                else:
-                    local_path = None
-                results.append({"record": rec, "image_path": str(local_path) if local_path and local_path.exists() else None})
+                dt = _parse_ts(rec.get("timestamp", ""))
+                if dt is None or dt < start_dt or dt >= end_dt:
+                    continue
+                local_path = _resolve_image_path(rec, images_dir)
+                results.append({"record": rec, "image_path": local_path})
             except Exception:
                 pass
 
-    # Sort by timestamp
     def _ts(r):
         t = r["record"].get("timestamp", "")
-        try:
-            return datetime.fromisoformat(t.replace("Z", "+00:00"))
-        except Exception:
-            return datetime.min
+        d = _parse_ts(t)
+        return d if d else datetime.min
 
     results.sort(key=_ts)
     return results
+
+
+def get_7am_7am_window(report_date):
+    """
+    Get start and end datetime for a 7am-7am 24hr block.
+    report_date: date or datetime. Block = report_date 07:00 -> report_date+1day 07:00
+    """
+    if hasattr(report_date, "date"):
+        d = report_date.date()
+    else:
+        d = report_date
+    start = datetime.combine(d, time(7, 0, 0))
+    end = start + timedelta(days=1)
+    return start, end
+
+
+def get_records_last_24h(local_records_dir, images_dir, sheets_records=None):
+    """
+    Get records from the last completed 7am-7am block.
+    At 7am Tue: reports Mon 7am -> Tue 7am. Before 7am Tue: reports Sun 7am -> Mon 7am.
+    Returns list of dicts with: record, image_path (local path or None)
+    """
+    now = datetime.now()
+    today_7am = datetime.combine(now.date(), time(7, 0, 0))
+    if now >= today_7am:
+        start = today_7am - timedelta(days=1)
+        end = today_7am
+    else:
+        start = today_7am - timedelta(days=2)
+        end = today_7am - timedelta(days=1)
+    return get_records_in_range(local_records_dir, images_dir, start, end)
 
 
 def _compute_summary(records_with_images):
@@ -152,15 +192,24 @@ def generate_pdf(records_with_images, output_buffer):
     img_col_start = margin + text_col_width + 8 * mm
     img_width = 60 * mm
     img_height_side = 70 * mm
+    block_gap = 8 * mm  # Space between captures
     y = page_h - margin
     for i, item in enumerate(records_with_images):
         rec = item["record"]
         img_path = item.get("image_path")
 
-        # Check if we need a new page (need space for image height)
-        if y - img_height_side < margin:
+        # Check if we need a new page (need space for image + gap)
+        if y - img_height_side - block_gap < margin:
             c.showPage()
             y = page_h - margin
+
+        # Horizontal line separator (except before first record)
+        if i > 0:
+            c.setStrokeColorRGB(0.7, 0.7, 0.7)
+            c.setLineWidth(0.5)
+            c.line(margin, y, page_w - margin, y)
+            c.setStrokeColorRGB(0, 0, 0)
+            y -= line_height
 
         # Left column: text
         y_start = y
@@ -190,7 +239,8 @@ def generate_pdf(records_with_images, output_buffer):
         else:
             c.drawString(img_col_start, y_start - line_height, "(No local image)")
 
-        y -= line_height * 1.5  # Space before next record
+        # Move below this block (image extends to y_start - img_height_side)
+        y = y_start - img_height_side - block_gap
 
     c.save()
 
@@ -237,16 +287,27 @@ def send_report_email(pdf_bytes, to_emails, subject=None, smtp_host=None, smtp_p
 def cleanup_images_older_than_hours(images_dir, hours=24):
     """Delete image files older than given hours. Returns count deleted."""
     cutoff = datetime.now() - timedelta(hours=hours)
+    return _cleanup_before(images_dir, cutoff)
+
+
+def cleanup_images_older_than_days(images_dir, days=7):
+    """Delete image files older than given days. Returns count deleted. Default 7 days retention."""
+    cutoff = datetime.now() - timedelta(days=days)
+    return _cleanup_before(images_dir, cutoff)
+
+
+def _cleanup_before(images_dir, cutoff):
     deleted = 0
     images_path = Path(images_dir)
     if not images_path.exists():
         return 0
-    for f in images_path.glob("*.jpg"):
-        try:
-            mtime = datetime.fromtimestamp(f.stat().st_mtime)
-            if mtime < cutoff:
-                f.unlink()
-                deleted += 1
-        except Exception:
-            pass
+    for pattern in ("*.jpg", "*.jpeg", "*.png"):
+        for f in images_path.glob(pattern):
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime)
+                if mtime < cutoff:
+                    f.unlink()
+                    deleted += 1
+            except Exception:
+                pass
     return deleted

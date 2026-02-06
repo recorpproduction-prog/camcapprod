@@ -31,18 +31,30 @@ The report is **automatically** generated and emailed. Set up once, then it runs
 4. `SMTP_USER` = your Gmail address
 5. `SMTP_HOST` = `smtp.gmail.com`, `SMTP_PORT` = `587`
 
-## Schedule the Report (Daily)
+## Schedule the Report (Tue–Fri 7am)
 
-Use a free cron service to call the auto-report URL daily:
+Reports use **7am–7am** 24-hour windows. Images are retained for **7 days**.
+
+Use a free cron service to call the auto-report URL Tue–Fri at 7am:
 
 1. Go to [cron-job.org](https://cron-job.org) (or similar)
 2. Create a job: `https://YOUR-APP.onrender.com/api/auto-report`
 3. Add `?secret=YOUR_REPORT_SECRET` if you set `REPORT_SECRET`
-4. Add `&cleanup=1` to delete old images after emailing
-5. Schedule: daily at your preferred time (e.g. 7:00 AM)
+4. Add `&cleanup=1` to delete images older than 7 days after emailing
+5. Schedule: **Tuesday, Wednesday, Thursday, Friday** at **7:00 AM**
+
+This captures all of Monday (Tue report) through to the last shift on Thursday (Fri report).
 
 **Example URL:**  
 `https://camcapprod.onrender.com/api/auto-report?secret=mysecret123&cleanup=1`
+
+## Custom Date/Time Range (Report Page)
+
+On the report page, you can choose:
+- **Start date** and **Start time** (default: yesterday 7:00)
+- **End date** and **End time** (default: today 7:00)
+
+Generate a PDF for any custom range without waiting for the auto-report.
 
 ## Adding More Emails Later
 

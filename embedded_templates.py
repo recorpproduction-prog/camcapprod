@@ -187,16 +187,33 @@ REPORT_HTML = r'''<!DOCTYPE html>
         .btn-cleanup{background:#F44336;}
         .btn-back{background:#757575;}
         .note{background:#FFF3E0;border-left:4px solid #FF9800;padding:15px;margin:20px 0;border-radius:6px;font-size:14px;}
+        .report-range{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:20px 0;}
+        .range-group{display:flex;flex-direction:column;gap:6px;}
+        .range-group label{font-weight:600;font-size:13px;color:#333;}
+        .range-group input{padding:10px;font-size:14px;border:2px solid #ddd;border-radius:6px;}
     </style>
 </head>
 <body>
-    <div class="header"><h1>Daily Compliance Report</h1><p>Summary first (pallets, quantity) then images. Auto-emailed to configured addresses.</p></div>
+    <div class="header"><h1>Daily Compliance Report</h1><p>Summary first (pallets, quantity) then images. Reports run Tue-Fri 7am. Each report covers 7am-7am (24h). Images kept 7 days.</p></div>
     <div class="section">
-        <p>Generate a PDF report of all captured labels from the last 24 hours. Each record includes label data and image.</p>
-        <a href="/api/generate-report" class="btn btn-primary" download>Generate PDF Report (last 24h)</a>
-        <a href="/api/generate-report?cleanup=1" class="btn btn-cleanup" download onclick="return confirm('Generate report AND delete images older than 24h?');">Generate + Clean Up Old Images</a>
+        <p>Generate a PDF report. Choose the date and time range, or use the default (last 7am-7am block).</p>
+        <div class="report-range">
+            <div class="range-group"><label for="fromDate">Start date</label><input type="date" id="fromDate"></div>
+            <div class="range-group"><label for="fromTime">Start time</label><input type="time" id="fromTime" value="07:00"></div>
+            <div class="range-group"><label for="toDate">End date</label><input type="date" id="toDate"></div>
+            <div class="range-group"><label for="toTime">End time</label><input type="time" id="toTime" value="07:00"></div>
+        </div>
+        <a href="/api/generate-report" class="btn btn-primary" id="generateLink" download>Generate PDF Report</a>
+        <a href="#" class="btn btn-cleanup" id="cleanupLink" onclick="return confirm('Generate report AND delete images older than 7 days?');">Generate + Clean Up Old Images</a>
         <a href="/" class="btn btn-back">Back to Capture</a>
-        <div class="note"><strong>Compliance:</strong> Download the PDF first. Store it for records. "Clean Up" removes local images older than 24h after generating.</div>
+        <div class="note"><strong>Compliance:</strong> Download the PDF first. Reports use 7am-7am blocks. Auto-reports run Tue-Fri at 7am. Images older than 7 days are removed when you use "Clean Up".</div>
     </div>
+    <script>
+    (function(){var n=new Date(),t=n.toISOString().slice(0,10),y=new Date(n);y.setDate(y.getDate()-1);var ys=y.toISOString().slice(0,10);
+    document.getElementById('fromDate').value=ys;document.getElementById('toDate').value=t;
+    function buildUrl(cleanup){var fd=document.getElementById('fromDate').value,ft=document.getElementById('fromTime').value,td=document.getElementById('toDate').value,tt=document.getElementById('toTime').value;var u='/api/generate-report?from_date='+encodeURIComponent(fd)+'&from_time='+encodeURIComponent(ft)+'&to_date='+encodeURIComponent(td)+'&to_time='+encodeURIComponent(tt);if(cleanup)u+='&cleanup=1';return u;}
+    function up(){document.getElementById('generateLink').href=buildUrl(false);document.getElementById('cleanupLink').href=buildUrl(true);}
+    ['fromDate','fromTime','toDate','toTime'].forEach(function(id){document.getElementById(id).addEventListener('change',up);});up();})();
+    </script>
 </body>
 </html>'''
