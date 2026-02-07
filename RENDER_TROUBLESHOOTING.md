@@ -102,6 +102,34 @@ Redeploy. 500 responses will then include the full traceback. Remove this after 
 
 ---
 
+## Storage diagnostics (is data saving to disk?)
+
+Open: `https://YOUR-APP.onrender.com/api/storage-diagnostics`
+
+You'll see JSON like:
+```json
+{
+  "images_folder": "/data/captured_images",
+  "local_records_dir": "/data/local_records",
+  "images_dir_exists": true,
+  "records_dir_exists": true,
+  "images_dir_writable": true,
+  "records_dir_writable": true,
+  "images_count": 5,
+  "records_count": 5,
+  "cwd": "/opt/render/project/src",
+  "using_persistent_disk": true
+}
+```
+
+- **using_persistent_disk: false** → You're using ephemeral storage (paths like `captured_images`, `local_records`). Add a Render Disk and set `IMAGES_FOLDER` / `LOCAL_RECORDS_DIR` to `/data/...`.
+- **exists: false** or **writable: false** → Directories missing or not writable. Check Disk mount path and env vars.
+- **count stays 0 after captures** → Data isn't being saved. Check Render **Logs** for `[Submit]` messages; if you see `[Submit] Request received` but nothing after, the request may be failing at OCR (timeout) or image save.
+
+**Capture logs:** Each capture now logs `[Submit] Request received`, `[Submit] Image saved: ...`, `[Submit] OCR completed`, `[Submit] Saved locally: ...`. If these don't appear in Logs, the request may not be reaching the server or is failing before those steps.
+
+---
+
 ## Persistent images & records (survive deploys/restarts)
 
 By default, images and records are stored in the ephemeral filesystem and are lost on deploy or restart.

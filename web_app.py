@@ -80,6 +80,17 @@ ocr = None
 parser = None
 sheets = None
 
+
+def _log(msg):
+    """Log and flush so it appears in Render logs immediately."""
+    print(msg)
+    try:
+        import sys
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
 def init_components():
     """Initialize OCR, parser, and Sheets"""
     global ocr, parser, sheets
@@ -129,7 +140,9 @@ def init_components():
     # Create directories (use persistent paths when IMAGES_FOLDER/LOCAL_RECORDS_DIR set)
     Path(CONFIG['images_folder']).mkdir(parents=True, exist_ok=True)
     Path(CONFIG['local_records_dir']).mkdir(parents=True, exist_ok=True)
-    print(f"[OK] Directories: images={CONFIG['images_folder']}, records={CONFIG['local_records_dir']}")
+    img_resolved = str(Path(CONFIG['images_folder']).resolve())
+    rec_resolved = str(Path(CONFIG['local_records_dir']).resolve())
+    _log(f"[Init] Storage: images={img_resolved}, records={rec_resolved}")
 
 def resize_for_ocr(img, max_size_kb=900):
     """
@@ -193,6 +206,44 @@ def diagnostics():
         'ocr_ready': ocr is not None,
     })
 
+
+@app.route('/api/storage-diagnostics')
+@app.route('/storage-diagnostics')
+def storage_diagnostics():
+    """Check if disk storage is working - paths, dirs, writability, file counts."""
+    images_dir = Path(CONFIG['images_folder']).resolve()
+    records_dir = Path(CONFIG['local_records_dir']).resolve()
+    images_exists = images_dir.exists()
+    records_exists = records_dir.exists()
+
+    def _writable(p):
+        if not p.exists():
+            return False
+        try:
+            test = p / '.write_test'
+            test.write_text('ok')
+            test.unlink()
+            return True
+        except Exception:
+            return False
+
+    n_images = len(list(images_dir.glob('*.jpg')) + list(images_dir.glob('*.jpeg')) + list(images_dir.glob('*.png'))) if images_exists else 0
+    n_records = len(list(records_dir.glob('record_*.json'))) if records_exists else 0
+
+    cwd = str(Path.cwd())
+    return jsonify({
+        'images_folder': str(images_dir),
+        'local_records_dir': str(records_dir),
+        'images_dir_exists': images_exists,
+        'records_dir_exists': records_exists,
+        'images_dir_writable': _writable(images_dir) if images_exists else False,
+        'records_dir_writable': _writable(records_dir) if records_exists else False,
+        'images_count': n_images,
+        'records_count': n_records,
+        'cwd': cwd,
+        'using_persistent_disk': str(images_dir).startswith('/data') or str(records_dir).startswith('/data'),
+    })
+
 def _render_page(template_name, embedded_html):
     """Render template from file if exists, else use embedded HTML (for when templates/ not in repo)."""
     try:
@@ -232,11 +283,13 @@ def check_duplicate_sscc(sscc):
 def submit_ticket():
     """Submit captured ticket"""
     try:
+        _log("[Submit] Request received")
         data = request.json
         image_data = data.get('image')
         test_mode = data.get('test_mode', False)
         
         if not image_data:
+            _log("[Submit] ERROR: No image data")
             return jsonify({'success': False, 'error': 'No image data'}), 400
         
         # Decode base64 image
@@ -247,31 +300,38 @@ def submit_ticket():
         try:
             img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         except Exception as e:
+            _log(f"[Submit] ERROR: Invalid image: {e}")
             return jsonify({'success': False, 'error': f'Invalid image: {e}'}), 400
         
         timestamp = datetime.now(NZ_TZ)  # Capture time in NZ Wellington
         images_dir = Path(CONFIG['images_folder'])
+        records_dir = Path(CONFIG['local_records_dir'])
+        images_dir.mkdir(parents=True, exist_ok=True)
+        records_dir.mkdir(parents=True, exist_ok=True)
+        
         filename = f"pallet_{timestamp.strftime('%Y%m%d_%H%M%S')}.jpg"
         image_path = images_dir / filename
         jpeg_bytes = resize_for_ocr(img, max_size_kb=900)
         with open(image_path, 'wb') as f:
             f.write(jpeg_bytes)
         
-        print(f"[OK] Image saved: {filename}")
+        _log(f"[Submit] Image saved: {filename} -> {image_path}")
         
         # Run OCR
         if not ocr:
+            _log("[Submit] ERROR: OCR not initialized")
             return jsonify({'success': False, 'error': 'OCR not initialized'}), 500
         
-        print("Running OCR...")
+        _log("[Submit] Running OCR...")
         ocr_text = ocr.process_image(str(image_path))
-        print(f"[OK] OCR completed: {len(ocr_text)} characters")
+        _log(f"[Submit] OCR completed: {len(ocr_text)} characters")
         
         # Parse data
         if not parser:
+            _log("[Submit] ERROR: Parser not initialized")
             return jsonify({'success': False, 'error': 'Parser not initialized'}), 500
         parsed_data = parser.parse(ocr_text)
-        print(f"[OK] Parsed {len(parsed_data['parsed'])} fields")
+        _log(f"[Submit] Parsed {len(parsed_data['parsed'])} fields")
         
         # Upload to Google Drive (date folder YYYY-MM-DD, 7am-7am blocks)
         image_drive_url = None
@@ -291,13 +351,13 @@ def submit_ticket():
                 )
                 if drive_url:
                     image_drive_url = drive_url
-                    print(f"[OK] Uploaded to Drive folder {get_date_folder_name()}")
+                    _log(f"[Submit] Uploaded to Drive folder {get_date_folder_name()}")
                 elif drive_err:
                     drive_error_msg = str(drive_err)
-                    print(f"[WARN] Drive upload skipped: {drive_err}")
+                    _log(f"[Submit] WARN Drive upload skipped: {drive_err}")
             except Exception as e:
                 drive_error_msg = str(e)
-                print(f"[WARN] Drive upload error: {e}")
+                _log(f"[Submit] WARN Drive upload error: {e}")
 
         # Create record - use Drive URL for display when available
         display_url = image_drive_url or f'/captured_images/{filename}'
@@ -336,17 +396,16 @@ def submit_ticket():
             try:
                 result = sheets.add_captured_record(record)
                 if result.get('success'):
-                    print(f"[OK] Submitted to Google Sheets (Row {result.get('row_num')})")
+                    _log(f"[Submit] Submitted to Google Sheets (Row {result.get('row_num')})")
             except Exception as e:
-                print(f"[ERROR] Sheets error: {e}")
+                _log(f"[Submit] ERROR Sheets: {e}")
                 result = {'success': False, 'error': str(e)}
         
         # Always save locally
-        records_dir = Path(CONFIG['local_records_dir'])
         record_file = records_dir / f"record_{timestamp.strftime('%Y%m%d_%H%M%S')}.json"
         with open(record_file, 'w') as f:
             json.dump(record, f, indent=2)
-        print(f"[OK] Saved locally: {record_file.name}")
+        _log(f"[Submit] Saved locally: {record_file.name} -> {record_file}")
         
         # Build response with diagnostics so user can see what worked/failed
         resp = {
@@ -369,7 +428,12 @@ def submit_ticket():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[ERROR] Submit error: {e}")
+        _log(f"[Submit] ERROR: {e}")
+        try:
+            import sys
+            sys.stdout.flush()
+        except Exception:
+            pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def _record_key(r):
