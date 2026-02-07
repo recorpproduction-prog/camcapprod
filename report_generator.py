@@ -23,6 +23,38 @@ def _parse_ts(ts):
         return None
 
 
+def _parse_label_datetime(rec):
+    """
+    Parse label date + time from record into naive datetime.
+    Record keys: date/label_date (DD/MM/YYYY or DD-MM-YYYY), time/label_time (HH:MM or HH:MM:SS).
+    Returns None if date is missing.
+    """
+    date_str = rec.get("date") or rec.get("label_date", "")
+    time_str = rec.get("time") or rec.get("label_time", "")
+    if not date_str:
+        return None
+    date_str = str(date_str).strip()
+    time_str = str(time_str).strip() if time_str else "00:00"
+    try:
+        for sep in ["/", "-"]:
+            if sep in date_str:
+                parts = date_str.split(sep)
+                if len(parts) == 3:
+                    d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                    if y < 100:
+                        y += 2000
+                    break
+        else:
+            return None
+        t_parts = time_str.replace(".", ":").split(":")
+        h = int(t_parts[0]) if t_parts else 0
+        m = int(t_parts[1]) if len(t_parts) > 1 else 0
+        s = int(t_parts[2]) if len(t_parts) > 2 else 0
+        return datetime(y, m, d, h, m, s)
+    except (ValueError, TypeError):
+        return None
+
+
 def _resolve_image_path(rec, images_dir, record_filename=None):
     """Get local image path from record. Uses image_path field, or derives from record file/timestamp."""
     images_path = Path(images_dir).resolve()
@@ -71,9 +103,10 @@ def _resolve_image_path(rec, images_dir, record_filename=None):
     return None
 
 
-def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt):
+def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt, filter_by="capture"):
     """
-    Get records with timestamps in [start_dt, end_dt).
+    Get records between start_dt and end_dt (inclusive start, exclusive end).
+    filter_by: "capture" = use timestamp (when photographed); "label" = use date/time on pallet label.
     Returns list of dicts with: record, image_path (local path or None)
     """
     results = []
@@ -82,20 +115,30 @@ def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt):
             try:
                 with open(f, "r") as fp:
                     rec = json.load(fp)
-                dt = _parse_ts(rec.get("timestamp", ""))
-                if dt is None or dt < start_dt or dt >= end_dt:
+                if filter_by == "label":
+                    dt = _parse_label_datetime(rec)
+                    if dt is None:
+                        continue
+                else:
+                    dt = _parse_ts(rec.get("timestamp", ""))
+                    if dt is None:
+                        continue
+                if dt < start_dt or dt >= end_dt:
                     continue
                 local_path = _resolve_image_path(rec, images_dir, record_filename=f.name)
                 results.append({"record": rec, "image_path": local_path})
             except Exception:
                 pass
 
-    def _ts(r):
+    def _sort_key(r):
+        if filter_by == "label":
+            d = _parse_label_datetime(r["record"])
+            return d if d else datetime.min
         t = r["record"].get("timestamp", "")
         d = _parse_ts(t)
         return d if d else datetime.min
 
-    results.sort(key=_ts)
+    results.sort(key=_sort_key)
     return results
 
 
@@ -113,21 +156,15 @@ def get_7am_7am_window(report_date):
     return start, end
 
 
-def get_records_last_24h(local_records_dir, images_dir, sheets_records=None):
+def get_records_last_24h(local_records_dir, images_dir, sheets_records=None, filter_by="capture"):
     """
-    Get records from the last completed 7am-7am block.
-    At 7am Tue: reports Mon 7am -> Tue 7am. Before 7am Tue: reports Sun 7am -> Mon 7am.
+    Get records in the last 24 hours (rolling window).
+    filter_by: "capture" = when photographed (default); "label" = date/time on pallet label.
     Returns list of dicts with: record, image_path (local path or None)
     """
     now = datetime.now()
-    today_7am = datetime.combine(now.date(), time(7, 0, 0))
-    if now >= today_7am:
-        start = today_7am - timedelta(days=1)
-        end = today_7am
-    else:
-        start = today_7am - timedelta(days=2)
-        end = today_7am - timedelta(days=1)
-    return get_records_in_range(local_records_dir, images_dir, start, end)
+    start = now - timedelta(hours=24)
+    return get_records_in_range(local_records_dir, images_dir, start, now, filter_by=filter_by)
 
 
 def _compute_summary(records_with_images):

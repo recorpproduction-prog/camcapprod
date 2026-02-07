@@ -496,12 +496,15 @@ def generate_report():
         records_dir = Path('local_records')
         images_dir = Path(CONFIG['images_folder'])
 
+        filter_by = request.args.get('filter_by', 'capture').lower()
+        if filter_by not in ('capture', 'label'):
+            filter_by = 'capture'
         start_end = _parse_report_range()
         if start_end:
             start_dt, end_dt = start_end
-            items = get_records_in_range(str(records_dir), str(images_dir), start_dt, end_dt)
+            items = get_records_in_range(str(records_dir), str(images_dir), start_dt, end_dt, filter_by=filter_by)
         else:
-            items = get_records_last_24h(str(records_dir), str(images_dir))
+            items = get_records_last_24h(str(records_dir), str(images_dir), filter_by=filter_by)
 
         buf = io.BytesIO()
         generate_pdf(items, buf)

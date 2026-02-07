@@ -199,12 +199,20 @@ REPORT_HTML = r'''<!DOCTYPE html>
         .range-group{display:flex;flex-direction:column;gap:6px;}
         .range-group label{font-weight:600;font-size:13px;color:#333;}
         .range-group input{padding:10px;font-size:14px;border:2px solid #ddd;border-radius:6px;}
+        .range-group input:focus{outline:none;border-color:#673AB7;}
+        .filter-by{margin:15px 0;padding:15px;background:#f9f9f9;border-radius:8px;}
+        .filter-by label{display:flex;align-items:center;gap:10px;cursor:pointer;margin:8px 0;}
+        .filter-by input[type="radio"]{accent-color:#673AB7;}
     </style>
 </head>
 <body>
-    <div class="header"><h1>Daily Compliance Report</h1><p>Summary first (pallets, quantity) then images. Reports run Tue-Fri 7am. Each report covers 7am-7am (24h). Images kept 7 days.</p></div>
+    <div class="header"><h1>Daily Compliance Report</h1><p>Summary first (pallets, quantity) then images. Reports run Tue-Fri 7am. Default: last 24h by capture time. Images kept 7 days.</p></div>
     <div class="section">
-        <p>Generate a PDF report. Default is the current 7am–7am 24hr block. Adjust if needed.</p>
+        <p>Generate a PDF report. Default: labels captured in the last 24 hours (by capture time). Adjust dates/times if needed.</p>
+        <div class="filter-by"><strong>Filter by:</strong>
+            <label><input type="radio" name="filterBy" value="capture" checked>Capture time (when label was photographed) — default for reports</label>
+            <label><input type="radio" name="filterBy" value="label">Label creation time (date/time printed on pallet label)</label>
+        </div>
         <div class="report-range">
             <div class="range-group"><label for="fromDate">Start date</label><input type="date" id="fromDate"></div>
             <div class="range-group"><label for="fromTime">Start time</label><input type="time" id="fromTime" value="07:00"></div>
@@ -214,15 +222,17 @@ REPORT_HTML = r'''<!DOCTYPE html>
         <a href="/api/generate-report" class="btn btn-primary" id="generateLink" download>Generate PDF Report</a>
         <a href="#" class="btn btn-cleanup" id="cleanupLink" onclick="return confirm('Generate report AND delete images older than 7 days?');">Generate + Clean Up Old Images</a>
         <a href="/" class="btn btn-back">Back to Capture</a>
-        <div class="note"><strong>Compliance:</strong> Download the PDF first. Reports use 7am-7am blocks. Auto-reports run Tue-Fri at 7am. Images older than 7 days are removed when you use "Clean Up".</div>
+        <div class="note"><strong>Compliance:</strong> Download the PDF first. Choose "Capture time" for when labels were photographed, or "Label creation time" for the date/time printed on the pallet. Default is capture time. Auto-reports run Tue-Fri at 7am. Images older than 7 days are removed when you use "Clean Up".</div>
     </div>
     <script>
-    (function(){var n=new Date(),sd=new Date(n),ed=new Date(n);if(n.getHours()>=7)ed.setDate(ed.getDate()+1);else sd.setDate(sd.getDate()-1);sd.setHours(7,0,0,0);ed.setHours(7,0,0,0);
-    document.getElementById('fromDate').value=sd.toISOString().slice(0,10);document.getElementById('fromTime').value='07:00';
-    document.getElementById('toDate').value=ed.toISOString().slice(0,10);document.getElementById('toTime').value='07:00';
-    function buildUrl(cleanup){var fd=document.getElementById('fromDate').value,ft=document.getElementById('fromTime').value,td=document.getElementById('toDate').value,tt=document.getElementById('toTime').value;var u='/api/generate-report?from_date='+encodeURIComponent(fd)+'&from_time='+encodeURIComponent(ft)+'&to_date='+encodeURIComponent(td)+'&to_time='+encodeURIComponent(tt);if(cleanup)u+='&cleanup=1';return u;}
+    (function(){function pad(x){return(x<10?'0':'')+x;}
+    var n=new Date(),sd=new Date(n.getTime()-24*60*60*1000);
+    document.getElementById('fromDate').value=sd.toISOString().slice(0,10);document.getElementById('fromTime').value=pad(sd.getHours())+':'+pad(sd.getMinutes());
+    document.getElementById('toDate').value=n.toISOString().slice(0,10);document.getElementById('toTime').value=pad(n.getHours())+':'+pad(n.getMinutes());
+    function buildUrl(cleanup){var fd=document.getElementById('fromDate').value,ft=document.getElementById('fromTime').value,td=document.getElementById('toDate').value,tt=document.getElementById('toTime').value,fb=document.querySelector('input[name="filterBy"]:checked').value;var u='/api/generate-report?from_date='+encodeURIComponent(fd)+'&from_time='+encodeURIComponent(ft)+'&to_date='+encodeURIComponent(td)+'&to_time='+encodeURIComponent(tt)+'&filter_by='+encodeURIComponent(fb);if(cleanup)u+='&cleanup=1';return u;}
     function up(){document.getElementById('generateLink').href=buildUrl(false);document.getElementById('cleanupLink').href=buildUrl(true);}
-    ['fromDate','fromTime','toDate','toTime'].forEach(function(id){document.getElementById(id).addEventListener('change',up);});up();})();
+    ['fromDate','fromTime','toDate','toTime'].forEach(function(id){document.getElementById(id).addEventListener('change',up);});
+    document.querySelectorAll('input[name="filterBy"]').forEach(function(r){r.addEventListener('change',up);});up();})();
     </script>
 </body>
 </html>'''
