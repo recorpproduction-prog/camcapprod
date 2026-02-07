@@ -303,17 +303,19 @@ def generate_pdf(records_with_images, output_buffer):
     c.showPage()
 
     # --- ONE PAGE PER BATCH: handwritten #, SSCC, quantity, running total (after totals) ---
+    # Column offsets (mm from margin) - spaced to avoid text overlap
+    off_hw, off_sscc, off_qty, off_total = 30, 60, 115, 135
     batches = _group_by_batch(records_with_images)
     for batch_id, batch_items in batches:
         c.setFont("Helvetica-Bold", 14)
         c.drawString(margin, page_h - margin, f"Batch: {batch_id}")
         y = page_h - margin - line_height * 2
         c.setFont("Helvetica-Bold", 9)
-        c.drawString(margin, y, "Batch ID")
-        c.drawString(margin + 25 * mm, y, "Handwritten #")
-        c.drawString(margin + 40 * mm, y, "SSCC")
-        c.drawString(margin + 100 * mm, y, "Quantity")
-        c.drawString(margin + 115 * mm, y, "Running Total")
+        c.drawString(margin, y, "Batch")
+        c.drawString(margin + off_hw * mm, y, "Handwritten #")
+        c.drawString(margin + off_sscc * mm, y, "SSCC")
+        c.drawString(margin + off_qty * mm, y, "Qty")
+        c.drawString(margin + off_total * mm, y, "Running")
         y -= line_height
         c.setStrokeColorRGB(0.8, 0.8, 0.8)
         c.line(margin, y, page_w - margin, y)
@@ -323,8 +325,8 @@ def generate_pdf(records_with_images, output_buffer):
         running = 0
         for item in batch_items:
             rec = item["record"]
-            hw = str(rec.get("handwritten_number") or "")
-            sscc = str(rec.get("sscc") or "")[:20]
+            hw = str(rec.get("handwritten_number") or "")[:10]
+            sscc = str(rec.get("sscc") or "")[:22]
             qty = 0
             try:
                 q = rec.get("quantity")
@@ -333,11 +335,11 @@ def generate_pdf(records_with_images, output_buffer):
             except (ValueError, TypeError):
                 pass
             running += qty
-            c.drawString(margin, y, str(batch_id)[:12])
-            c.drawString(margin + 25 * mm, y, hw)
-            c.drawString(margin + 40 * mm, y, sscc)
-            c.drawString(margin + 100 * mm, y, str(qty))
-            c.drawString(margin + 115 * mm, y, str(running))
+            c.drawString(margin, y, str(batch_id)[:10])
+            c.drawString(margin + off_hw * mm, y, hw)
+            c.drawString(margin + off_sscc * mm, y, sscc)
+            c.drawString(margin + off_qty * mm, y, str(qty))
+            c.drawString(margin + off_total * mm, y, str(running))
             y -= line_height
             if y < margin + line_height * 2:
                 c.showPage()
@@ -394,7 +396,10 @@ def generate_pdf(records_with_images, output_buffer):
         for label, key in fields:
             v = rec.get(key, "")
             if v:
-                text = f"{label}: {str(v)[:50]}"
+                # Truncate to fit 75mm text column (~38 chars at 9pt) to avoid overlap with image
+                text = f"{label}: {str(v)}"
+                if len(text) > 38:
+                    text = text[:35] + "..."
                 c.drawString(margin, y, text)
                 y -= line_height
         y -= line_height
