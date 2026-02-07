@@ -6,18 +6,21 @@ Reports use 7am-7am 24hr windows. Images retained for 7 days.
 
 from datetime import datetime, timedelta, time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import io
 import json
 
+NZ_TZ = ZoneInfo("Pacific/Auckland")
+
 
 def _parse_ts(ts):
-    """Parse timestamp string to naive datetime."""
+    """Parse timestamp string to naive datetime (NZ local for range comparison)."""
     if not ts:
         return None
     try:
-        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
         if dt.tzinfo:
-            dt = dt.replace(tzinfo=None)
+            dt = dt.astimezone(NZ_TZ).replace(tzinfo=None)  # Convert to NZ local
         return dt
     except Exception:
         return None
@@ -158,18 +161,18 @@ def get_7am_7am_window(report_date):
 
 def get_records_last_24h(local_records_dir, images_dir, sheets_records=None, filter_by="capture"):
     """
-    Get records in the last 24 hours (rolling window).
+    Get records in the last 24 hours (rolling window, NZ Wellington time).
     filter_by: "capture" = when photographed (default); "label" = date/time on pallet label.
     Returns list of dicts with: record, image_path (local path or None)
     """
-    now = datetime.now()
+    now = datetime.now(NZ_TZ).replace(tzinfo=None)
     start = now - timedelta(hours=24)
     return get_records_in_range(local_records_dir, images_dir, start, now, filter_by=filter_by)
 
 
 def get_records_last_n_days(local_records_dir, images_dir, days=7, filter_by="capture"):
-    """Get records from the last N days (server time). Use when form date range returns nothing."""
-    now = datetime.now()
+    """Get records from the last N days (NZ Wellington time)."""
+    now = datetime.now(NZ_TZ).replace(tzinfo=None)
     start = now - timedelta(days=int(days))
     return get_records_in_range(local_records_dir, images_dir, start, now, filter_by=filter_by)
 

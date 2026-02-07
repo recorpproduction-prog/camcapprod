@@ -372,33 +372,53 @@ def submit_ticket():
         print(f"[ERROR] Submit error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def _record_key(r):
+    """Unique key for dedup: SSCC if present, else timestamp."""
+    sscc = (r.get('sscc') or '').strip()
+    if sscc:
+        return ('sscc', sscc)
+    return ('ts', r.get('timestamp', ''))
+
+
 @app.route('/api/pending', methods=['GET'])
 def get_pending():
-    """Get pending records"""
+    """Get pending records - merge local (prioritized) with Sheets, dedupe by SSCC or timestamp."""
     try:
+        seen = {}
         records = []
         
-        # Get from Sheets if available
-        if sheets:
-            try:
-                records = sheets.get_pending_records()
-                print(f"[OK] Loaded {len(records)} records from Sheets")
-            except Exception as e:
-                print(f"[ERROR] Sheets error: {e}")
-        
-        # Also check local records (CAPTURED or legacy PENDING)
+        # Load local records first (newest captures may be local-only before Sheets sync)
         records_dir = Path(CONFIG['local_records_dir'])
         if records_dir.exists():
-            for json_file in records_dir.glob('record_*.json'):
+            for json_file in sorted(records_dir.glob('record_*.json')):
                 try:
                     with open(json_file, 'r') as f:
                         record = json.load(f)
                         st = record.get('status', '')
                         if st in ('CAPTURED', 'PENDING'):
-                            if not any(r.get('timestamp') == record.get('timestamp') for r in records):
+                            k = _record_key(record)
+                            if k not in seen:
+                                seen[k] = len(records)
                                 records.append(record)
                 except Exception:
                     pass
+        
+        # Add Sheets records not already present
+        if sheets:
+            try:
+                for record in sheets.get_pending_records():
+                    k = _record_key(record)
+                    if k not in seen:
+                        seen[k] = len(records)
+                        records.append(record)
+                print(f"[OK] Loaded {len(records)} records (local + Sheets)")
+            except Exception as e:
+                print(f"[ERROR] Sheets error: {e}")
+        
+        # Sort by timestamp descending (newest first) - ISO strings sort correctly
+        def _ts(r):
+            return (r.get('timestamp') or '')[:26] or '0000'
+        records.sort(key=_ts, reverse=True)
 
         # Ensure image_path is set for display (prefer Drive URL)
         for r in records:
