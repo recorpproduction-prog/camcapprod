@@ -14,7 +14,10 @@ CAPTURE_HTML = r'''<!DOCTYPE html>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
         .header { background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 25px; text-align: center; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .header h1 { font-size: 28px; margin-bottom: 10px; }
-        .container { max-width: 1000px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .main-row { display: flex; gap: 20px; margin-bottom: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .camera-col { flex: 0 0 auto; min-width: 320px; }
+        .data-col { flex: 1; min-width: 280px; }
         .section { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .camera-select { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
         .camera-select label { font-weight: bold; display: block; margin-bottom: 8px; color: #333; }
@@ -51,7 +54,7 @@ CAPTURE_HTML = r'''<!DOCTYPE html>
         .info { background: #E3F2FD; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3; }
         .label-data { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .label-data h3 { margin-bottom: 15px; color: #333; border-bottom: 2px solid #2196F3; padding-bottom: 10px; }
-        .label-data-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+        .label-data-list { display: flex; flex-direction: column; gap: 8px; }
         .label-data-item { display: flex; flex-direction: column; padding: 10px 12px; background: #f9f9f9; border-radius: 6px; border-left: 3px solid #2196F3; }
         .label-data-item .field-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
         .label-data-item .field-value { font-size: 15px; font-weight: 600; color: #333; }
@@ -59,6 +62,17 @@ CAPTURE_HTML = r'''<!DOCTYPE html>
         .raw-ocr { margin-top: 15px; padding: 12px; background: #f5f5f5; border-radius: 6px; border: 1px solid #ddd; }
         .raw-ocr summary { cursor: pointer; font-weight: bold; color: #666; }
         .raw-ocr pre { margin-top: 10px; font-size: 12px; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+        .diag-collapse { background: #1e1e1e; color: #d4d4d4; border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+        .diag-collapse summary { padding: 12px 16px; cursor: pointer; font-weight: bold; list-style: none; }
+        .diag-collapse summary::-webkit-details-marker { display: none; }
+        .diag-collapse summary::before { content: '▸ '; }
+        .diag-collapse[open] summary::before { content: '▾ '; }
+        .diag-collapse .diag-body { padding: 0 16px 16px; }
+        .batch-summary { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-top: 20px; }
+        .batch-summary-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #2196F3; }
+        .batch-summary-item .batch-id { font-weight: bold; font-size: 16px; }
+        .batch-summary-item .batch-qty { font-weight: bold; color: #1976D2; }
+        .batch-summary-item .batch-desc { color: #555; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -73,22 +87,12 @@ CAPTURE_HTML = r'''<!DOCTYPE html>
             <button class="btn-secondary" onclick="window.open('/report','_blank')">Daily Report</button>
             <button id="testModeBtn" class="btn-test" onclick="toggleTestMode()">Test Mode: OFF</button>
         </div>
-        <div class="section">
-            <div class="camera-select"><label>Camera:</label><select id="cameraSelect"><option value="">Loading...</option></select></div>
-            <div class="camera-frame" id="cameraFrame">
-                <video id="video" autoplay playsinline></video>
-                <div id="videoPlaceholder">Camera not started. Click START CAMERA to begin</div>
-                <div class="countdown-overlay" id="countdownOverlay"></div>
-                <div class="camera-status ready" id="cameraStatus">Ready</div>
-            </div>
-            <canvas id="canvas"></canvas>
+        <div class="main-row">
+            <div class="camera-col section"><div class="camera-select"><label>Camera:</label><select id="cameraSelect"><option value="">Loading...</option></select></div><div class="camera-frame" id="cameraFrame"><video id="video" autoplay playsinline></video><div id="videoPlaceholder">Camera not started. Click START CAMERA to begin</div><div class="countdown-overlay" id="countdownOverlay"></div><div class="camera-status ready" id="cameraStatus">Ready</div></div><canvas id="canvas"></canvas></div>
+            <div class="data-col section label-data"><h3>Label Data (last capture)</h3><div id="labelDataList" class="label-data-empty">No data yet</div><details class="raw-ocr" style="margin-top:12px;"><summary>Raw OCR</summary><pre id="rawOcrText">Nothing yet</pre></details></div>
         </div>
-        <div class="section" style="background:#1e1e1e;color:#d4d4d4;font-family:monospace;font-size:13px;">
-            <h3 style="color:#fff;margin-bottom:10px;">Process / Diagnostics</h3>
-            <pre id="processLog" style="min-height:120px;max-height:220px;overflow-y:auto;padding:12px;background:#2d2d2d;border-radius:6px;border:1px solid #444;white-space:pre-wrap;">Loading...</pre>
-            <button type="button" onclick="loadDiagnostics()" style="margin-top:8px;padding:6px 12px;font-size:12px;background:#444;color:#fff;border:none;border-radius:4px;cursor:pointer;">Refresh diagnostics</button>
-        </div>
-        <div class="label-data"><h3>Label Data</h3><div id="labelDataList" class="label-data-empty">No data yet</div><details class="raw-ocr"><summary>Raw OCR</summary><pre id="rawOcrText">Nothing yet</pre></details></div>
+        <details class="diag-collapse"><summary>Process / Diagnostics</summary><div class="diag-body"><pre id="processLog" style="min-height:80px;max-height:180px;overflow-y:auto;padding:12px;background:#2d2d2d;border-radius:6px;border:1px solid #444;white-space:pre-wrap;font-family:monospace;">Loading...</pre><button type="button" onclick="loadDiagnostics()" style="margin-top:8px;padding:6px 12px;font-size:12px;background:#444;color:#fff;border:none;border-radius:4px;cursor:pointer;">Refresh diagnostics</button></div></details>
+        <div class="batch-summary" id="batchSummary"><div style="color:#999;font-style:italic;">No batch data yet – capture labels to see totals by batch</div></div>
         <div id="status" class="status ready" style="display:none;"></div>
     </div>
     <script>
@@ -107,8 +111,11 @@ function loadDiagnostics(){var el=document.getElementById('processLog');if(!el)r
     function sharpness(id){var d=id.data,w=id.width,h=id.height,v=0,m=0,n=0;for(var y=1;y<h-1;y+=10)for(var x=1;x<w-1;x+=10){var idx=(y*w+x)*4;var g=(d[idx]+d[idx+1]+d[idx+2])/3;var ni=(y*w+(x+1))*4;var ng=(d[ni]+d[ni+1]+d[ni+2])/3;m+=Math.abs(g-ng);n++;}if(n===0)return 0;m/=n;for(var y=1;y<h-1;y+=10)for(var x=1;x<w-1;x+=10){var idx=(y*w+x)*4;var g=(d[idx]+d[idx+1]+d[idx+2])/3;var ni=(y*w+(x+1))*4;var ng=(d[ni]+d[ni+1]+d[ni+2])/3;v+=Math.pow(Math.abs(g-ng)-m,2);}return v/n;}
     function analyzeFrame(){if(isProcessing||!isRunning)return;try{var ctx=canvas.getContext('2d',{willReadFrequently:true});var id=ctx.getImageData(0,0,canvas.width,canvas.height);var sh=sharpness(id);if(captureState==='capturing'||captureState==='countdown')return;if(captureState==='wait_exit'){if(sh<SHARPNESS_THRESHOLD*0.7){exitFrameCount++;if(exitFrameCount>=EXIT_FRAMES_NEEDED){captureState='ready';exitFrameCount=0;prevFramePixels=null;updateStatus('ready','Ready for next label');}}else exitFrameCount=0;return;}if(captureState==='ready'){prevFramePixels=getPixels(id);if(sh>SHARPNESS_THRESHOLD){captureState='label_in_view';stableFrameCount=0;updateStatus('processing','Hold steady...');}return;}if(captureState==='label_in_view'||captureState==='checking'){if(sh<SHARPNESS_THRESHOLD){captureState='ready';stableFrameCount=0;prevFramePixels=null;return;}var mot=motion(id,prevFramePixels);prevFramePixels=getPixels(id);if(mot<MOTION_THRESHOLD){stableFrameCount++;captureState='checking';if(stableFrameCount>=STABLE_FRAMES_NEEDED){captureState='countdown';captureWithCountdown();}}else{stableFrameCount=0;updateStatus('processing','Hold steady...');}}}catch(e){}}
     function captureWithCountdown(){if(isProcessing)return;isProcessing=true;captureState='capturing';var frame=document.getElementById('cameraFrame'),overlay=document.getElementById('countdownOverlay');if(stream)stream.getTracks().forEach(function(t){t.enabled=false;});var fc=document.createElement('canvas');fc.width=canvas.width;fc.height=canvas.height;fc.getContext('2d').drawImage(canvas,0,0);var v=document.getElementById('video'),ph=document.getElementById('videoPlaceholder');ph.style.backgroundImage='url('+fc.toDataURL('image/jpeg')+')';ph.style.backgroundSize='cover';ph.style.display='flex';ph.innerHTML='';var doCap=function(){overlay.classList.add('green');overlay.textContent='OK';updateStatus('processing','Processing...');setTimeout(function(){overlay.classList.remove('active','green');overlay.textContent='';if(stream)stream.getTracks().forEach(function(t){t.enabled=true;});v.style.display='block';ph.style.backgroundImage='';ph.style.display='none';captureState='wait_exit';exitFrameCount=0;updateStatus('success','Captured! Remove label');var w=fc.width,h=fc.height,m=800;if(w>m||h>m){var sc=m/Math.max(w,h);w=Math.round(w*sc);h=Math.round(h*sc);}var cc=document.createElement('canvas');cc.width=w;cc.height=h;cc.getContext('2d').drawImage(fc,0,0,w,h);submitTicket(cc.toDataURL('image/jpeg',0.7));},500);};overlay.classList.add('active');overlay.classList.remove('green');var cd=function(n){if(n>0){overlay.textContent=n;updateStatus('processing','Hold... '+n);setTimeout(function(){cd(n-1);},1000);}else{frame.classList.add('capture-good');doCap();}};cd(3);}
-    function submitTicket(img){updateStatus('processing','Running OCR...');fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:img,test_mode:testMode})}).then(function(r){return r.json().then(function(d){return{ok:r.ok,status:r.status,data:d};});}).then(function(_){var d=_.data;if(d.duplicate){if(d.record)displayData(d.record);updateStatus('error','Duplicate - use Test Mode');captureState='ready';isProcessing=false;return;}if(d.success){if(d.record)displayData(d.record);var m=d.message||'Submitted!';if(d.sheets_error)m+=' Sheet: '+d.sheets_error;updateStatus('success',m);isProcessing=false;var pl=document.getElementById('processLog');if(pl){var tx=(pl.textContent||'').replace(/After capture.*/,'');tx+='--- Last capture ---\n';tx+='OCR: done\n';tx+='Drive: '+(d.drive_uploaded?'OK':'skipped')+'\n';tx+='Sheets: '+(d.sheets_submitted?'OK':'FAILED')+(d.sheets_error?' - '+d.sheets_error:'')+'\n';pl.textContent=tx;pl.scrollTop=pl.scrollHeight;}}else{throw new Error(d.message||d.error||'Failed');}}).catch(function(e){updateStatus('error','Error: '+e.message);captureState='ready';isProcessing=false;});}
+    var capturedRecords=[];
+    function submitTicket(img){updateStatus('processing','Running OCR...');fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:img,test_mode:testMode})}).then(function(r){return r.json().then(function(d){return{ok:r.ok,status:r.status,data:d};});}).then(function(_){var d=_.data;if(d.duplicate){if(d.record)displayData(d.record);updateStatus('error','Duplicate - use Test Mode');captureState='ready';isProcessing=false;return;}if(d.success){if(d.record){capturedRecords.push(d.record);displayData(d.record);updateBatchSummary();}var m=d.message||'Submitted!';if(d.sheets_error)m+=' Sheet: '+d.sheets_error;updateStatus('success',m);isProcessing=false;var pl=document.getElementById('processLog');if(pl){var tx=(pl.textContent||'').replace(/After capture.*/,'');tx+='--- Last capture ---\n';tx+='OCR: done\n';tx+='Drive: '+(d.drive_uploaded?'OK':'skipped')+'\n';tx+='Sheets: '+(d.sheets_submitted?'OK':'FAILED')+(d.sheets_error?' - '+d.sheets_error:'')+'\n';pl.textContent=tx;pl.scrollTop=pl.scrollHeight;}}else{throw new Error(d.message||d.error||'Failed');}}).catch(function(e){updateStatus('error','Error: '+e.message);captureState='ready';isProcessing=false;});}
     function displayData(r){var f=[{k:'sscc',l:'SSCC'},{k:'item_number',l:'Item No'},{k:'item_description',l:'Description'},{k:'batch_no',l:'Batch'},{k:'quantity',l:'Qty'},{k:'date',l:'Date'},{k:'time',l:'Time'},{k:'handwritten_number',l:'Handwritten'}],c=document.getElementById('labelDataList'),h='',has=0;f.forEach(function(x){var v=r[x.k];if(v){has=1;h+='<div class="label-data-item"><span class="field-label">'+x.l+'</span><span class="field-value">'+String(v).replace(/</g,'&lt;')+'</span></div>';}});c.className=has?'label-data-list':'label-data-empty';c.innerHTML=has?h:'No fields detected';document.getElementById('rawOcrText').textContent=r.raw_ocr_text||'(none)';}
+    function escapeHtml(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+    function updateBatchSummary(){var el=document.getElementById('batchSummary');if(!el)return;if(capturedRecords.length===0){el.innerHTML='<div style="color:#999;font-style:italic;">No batch data yet – capture labels to see totals by batch</div>';return;}var byBatch={};capturedRecords.forEach(function(r){var b=(r.batch_no||'').toString().trim()||'(no batch)';if(!byBatch[b])byBatch[b]={qty:0,desc:r.item_description||''};byBatch[b].qty+=parseInt(r.quantity,10)||0;if(r.item_description)byBatch[b].desc=r.item_description;});var h='';Object.keys(byBatch).sort().forEach(function(b){var d=byBatch[b];h+='<div class="batch-summary-item"><span class="batch-id">Batch: '+escapeHtml(b)+'</span><span class="batch-qty">Total: '+d.qty+'</span><span class="batch-desc">'+escapeHtml((d.desc||'').substring(0,60))+(d.desc&&d.desc.length>60?'…':'')+'</span></div>';});el.innerHTML=h;}
     </script>
 </body>
 </html>'''

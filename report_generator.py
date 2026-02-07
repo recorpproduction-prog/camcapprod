@@ -158,6 +158,49 @@ def _compute_summary(records_with_images):
     }
 
 
+def _compute_shift_totals(records_with_images):
+    """Compute batch-level totals for shift totals section."""
+    by_batch = {}
+    for item in records_with_images:
+        rec = item["record"]
+        batch = str(rec.get("batch_no") or "").strip() or "(no batch)"
+        qty = 0
+        try:
+            q = rec.get("quantity")
+            if q is not None:
+                qty = int(float(q))
+        except (ValueError, TypeError):
+            pass
+        if batch not in by_batch:
+            by_batch[batch] = {"qty": 0, "desc": rec.get("item_description") or ""}
+        by_batch[batch]["qty"] += qty
+        if rec.get("item_description"):
+            by_batch[batch]["desc"] = rec["item_description"]
+    return sorted(by_batch.items(), key=lambda x: x[0])
+
+
+def _group_by_batch(records_with_images):
+    """Group records by batch, each batch sorted by handwritten_number."""
+    by_batch = {}
+    for item in records_with_images:
+        rec = item["record"]
+        batch = str(rec.get("batch_no") or "").strip() or "(no batch)"
+        if batch not in by_batch:
+            by_batch[batch] = []
+        by_batch[batch].append(item)
+
+    def _handwritten_sort_key(item):
+        hw = item["record"].get("handwritten_number") or ""
+        try:
+            return (0, int(float(str(hw))))
+        except (ValueError, TypeError):
+            return (1, str(hw))
+
+    for batch in by_batch:
+        by_batch[batch].sort(key=_handwritten_sort_key)
+    return sorted(by_batch.items(), key=lambda x: x[0])
+
+
 def generate_pdf(records_with_images, output_buffer):
     """Generate PDF: Page 1 = Summary, then detail pages with images."""
     try:
@@ -182,53 +225,90 @@ def generate_pdf(records_with_images, output_buffer):
         c.save()
         return
 
-    # --- PAGE 1: SUMMARY (one-page overview) ---
+    summary = _compute_summary(records_with_images)
+
+    # --- PAGE 1: SHIFT TOTALS (at start) ---
     y = page_h - margin
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(margin, y, "Pallet Ticket Capture - Daily Summary")
+    c.drawString(margin, y, "Pallet Ticket Capture - Shift Totals")
     y -= line_height * 2
     c.setFont("Helvetica", 10)
     c.drawString(margin, y, f"Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    y -= line_height * 2
-
-    summary = _compute_summary(records_with_images)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(margin, y, "Label Run Summary")
-    y -= line_height * 1.5
-    c.setFont("Helvetica", 11)
-    c.drawString(margin, y, f"Pallets produced: {summary['pallets_produced']}")
-    y -= line_height
-    c.drawString(margin, y, f"Total quantity: {summary['total_quantity']}")
-    y -= line_height
-    c.drawString(margin, y, f"Unique items: {summary['unique_items']}")
     y -= line_height
     c.drawString(margin, y, f"Period (by capture time): {summary['date_from']} to {summary['date_to']}")
+    y -= line_height * 2
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(margin, y, f"Pallets: {summary['pallets_produced']}  |  Total quantity: {summary['total_quantity']}  |  Unique items: {summary['unique_items']}")
     y -= line_height * 1.5
-
-    if summary["item_list"]:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, "Items captured:")
-        y -= line_height
-        c.setFont("Helvetica", 9)
-        for it in summary["item_list"][:15]:
-            c.drawString(margin + 5 * mm, y, "- " + it)
-            y -= line_height
-        if len(summary["item_list"]) > 15:
-            c.drawString(margin + 5 * mm, y, f"... and {len(summary['item_list']) - 15} more")
-            y -= line_height
-
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margin, y, "By batch:")
     y -= line_height
-    c.setFont("Helvetica-Oblique", 9)
-    c.drawString(margin, y, "--- Detail with images follows ---")
+    c.setFont("Helvetica", 10)
+    shift_totals = _compute_shift_totals(records_with_images)
+    for batch_id, data in shift_totals:
+        batch_str = str(batch_id)[:25]
+        qty_str = str(data["qty"])
+        desc_str = (data.get("desc") or "")[:45]
+        if len(desc_str) > 45:
+            desc_str = desc_str[:42] + "..."
+        c.drawString(margin, y, f"Batch {batch_str}  |  Total: {qty_str}  |  {desc_str}")
+        y -= line_height
+        if y < margin + line_height * 3:
+            c.showPage()
+            y = page_h - margin
     c.showPage()
 
-    # --- DETAIL PAGES: Text on left, image on right ---
+    # --- ONE PAGE PER BATCH: handwritten #, SSCC, quantity, running total (after totals) ---
+    batches = _group_by_batch(records_with_images)
+    for batch_id, batch_items in batches:
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin, page_h - margin, f"Batch: {batch_id}")
+        y = page_h - margin - line_height * 2
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin, y, "Handwritten #")
+        c.drawString(margin + 22 * mm, y, "SSCC")
+        c.drawString(margin + 95 * mm, y, "Quantity")
+        c.drawString(margin + 115 * mm, y, "Running Total")
+        y -= line_height
+        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+        c.line(margin, y, page_w - margin, y)
+        y -= line_height
+        c.setStrokeColorRGB(0, 0, 0)
+        c.setFont("Helvetica", 9)
+        running = 0
+        for item in batch_items:
+            rec = item["record"]
+            hw = str(rec.get("handwritten_number") or "")
+            sscc = str(rec.get("sscc") or "")[:28]
+            qty = 0
+            try:
+                q = rec.get("quantity")
+                if q is not None:
+                    qty = int(float(q))
+            except (ValueError, TypeError):
+                pass
+            running += qty
+            c.drawString(margin, y, hw)
+            c.drawString(margin + 22 * mm, y, sscc)
+            c.drawString(margin + 95 * mm, y, str(qty))
+            c.drawString(margin + 115 * mm, y, str(running))
+            y -= line_height
+            if y < margin + line_height * 2:
+                c.showPage()
+                y = page_h - margin
+        c.drawString(margin, y - line_height, f"Batch total: {running}")
+        c.showPage()
+
+    # --- DETAIL PAGES: All images in order with data ---
+    y = page_h - margin
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(margin, y, "Label Images (with data)")
+    y -= line_height * 2
     text_col_width = 75 * mm
     img_col_start = margin + text_col_width + 8 * mm
     img_width = 60 * mm
     img_height_side = 70 * mm
     block_gap = 8 * mm  # Space between captures
-    y = page_h - margin
     for i, item in enumerate(records_with_images):
         rec = item["record"]
         img_path = item.get("image_path")
