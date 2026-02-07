@@ -99,3 +99,23 @@ Redeploy. 500 responses will then include the full traceback. Remove this after 
 - **OCR not initialized** – Add `OCR_API_KEY` (get a free key from ocr.space).
 - **Sheets error** – Check `GOOGLE_CREDENTIALS_JSON` is valid JSON (minified, one line).
 - **Disk write** – Images save to `captured_images/` (outside static). If your host restricts writes, this could fail.
+
+---
+
+## Persistent images & records (survive deploys/restarts)
+
+By default, images and records are stored in the ephemeral filesystem and are lost on deploy or restart.
+
+### Use a Render Persistent Disk
+
+1. In Render Dashboard → your service → **Disks** → **Add Disk**
+2. Name: `data` (or any name)
+3. Mount path: `/data`
+4. Size: 1 GB (or more)
+5. Click **Add**
+
+6. In **Environment**, add these variables:
+   - `IMAGES_FOLDER` = `/data/captured_images`
+   - `LOCAL_RECORDS_DIR` = `/data/local_records`
+
+7. **Redeploy** the service. The app will create these folders on the persistent disk. Images and records will survive deploys and restarts.

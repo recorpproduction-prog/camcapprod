@@ -167,6 +167,13 @@ def get_records_last_24h(local_records_dir, images_dir, sheets_records=None, fil
     return get_records_in_range(local_records_dir, images_dir, start, now, filter_by=filter_by)
 
 
+def get_records_last_n_days(local_records_dir, images_dir, days=7, filter_by="capture"):
+    """Get records from the last N days (server time). Use when form date range returns nothing."""
+    now = datetime.now()
+    start = now - timedelta(days=int(days))
+    return get_records_in_range(local_records_dir, images_dir, start, now, filter_by=filter_by)
+
+
 def _compute_summary(records_with_images):
     """Compute summary stats from records."""
     total_qty = 0
@@ -302,9 +309,10 @@ def generate_pdf(records_with_images, output_buffer):
         c.drawString(margin, page_h - margin, f"Batch: {batch_id}")
         y = page_h - margin - line_height * 2
         c.setFont("Helvetica-Bold", 9)
-        c.drawString(margin, y, "Handwritten #")
-        c.drawString(margin + 22 * mm, y, "SSCC")
-        c.drawString(margin + 95 * mm, y, "Quantity")
+        c.drawString(margin, y, "Batch ID")
+        c.drawString(margin + 25 * mm, y, "Handwritten #")
+        c.drawString(margin + 40 * mm, y, "SSCC")
+        c.drawString(margin + 100 * mm, y, "Quantity")
         c.drawString(margin + 115 * mm, y, "Running Total")
         y -= line_height
         c.setStrokeColorRGB(0.8, 0.8, 0.8)
@@ -316,7 +324,7 @@ def generate_pdf(records_with_images, output_buffer):
         for item in batch_items:
             rec = item["record"]
             hw = str(rec.get("handwritten_number") or "")
-            sscc = str(rec.get("sscc") or "")[:28]
+            sscc = str(rec.get("sscc") or "")[:20]
             qty = 0
             try:
                 q = rec.get("quantity")
@@ -325,9 +333,10 @@ def generate_pdf(records_with_images, output_buffer):
             except (ValueError, TypeError):
                 pass
             running += qty
-            c.drawString(margin, y, hw)
-            c.drawString(margin + 22 * mm, y, sscc)
-            c.drawString(margin + 95 * mm, y, str(qty))
+            c.drawString(margin, y, str(batch_id)[:12])
+            c.drawString(margin + 25 * mm, y, hw)
+            c.drawString(margin + 40 * mm, y, sscc)
+            c.drawString(margin + 100 * mm, y, str(qty))
             c.drawString(margin + 115 * mm, y, str(running))
             y -= line_height
             if y < margin + line_height * 2:

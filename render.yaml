@@ -13,3 +13,6 @@ services:
       - key: OCR_PROVIDER
         value: ocrspace
       # Add in Dashboard: GOOGLE_SHEET_ID, GOOGLE_CREDENTIALS_JSON (or Secret File)
+      # For persistent images/records, add a Disk (mount /data) and set:
+      #   IMAGES_FOLDER=/data/captured_images
+      #   LOCAL_RECORDS_DIR=/data/local_records

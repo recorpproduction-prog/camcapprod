@@ -53,8 +53,10 @@ def handle_500(err):
     return jsonify({'error': 'Internal Server Error', 'message': msg}), 500
 
 # Configuration - works for local and cloud (Render, Railway, etc.)
+# Set IMAGES_FOLDER and LOCAL_RECORDS_DIR to persistent disk paths (e.g. /data/...) on Render
 CONFIG = {
-    'images_folder': 'captured_images',  # Outside static - some hosts make static read-only
+    'images_folder': os.getenv('IMAGES_FOLDER', 'captured_images'),
+    'local_records_dir': os.getenv('LOCAL_RECORDS_DIR', 'local_records'),
     'ocr_provider': os.getenv('OCR_PROVIDER', 'ocrspace'),
     'ocr_api_key': os.getenv('OCR_API_KEY'),
     'sheets_id': os.getenv('GOOGLE_SHEET_ID'),
@@ -120,10 +122,10 @@ def init_components():
     else:
         print("[INFO] Google Sheets not configured - records will be saved locally only")
     
-    # Create directories
+    # Create directories (use persistent paths when IMAGES_FOLDER/LOCAL_RECORDS_DIR set)
     Path(CONFIG['images_folder']).mkdir(parents=True, exist_ok=True)
-    Path('local_records').mkdir(exist_ok=True)
-    print("[OK] Directories created")
+    Path(CONFIG['local_records_dir']).mkdir(parents=True, exist_ok=True)
+    print(f"[OK] Directories: images={CONFIG['images_folder']}, records={CONFIG['local_records_dir']}")
 
 def resize_for_ocr(img, max_size_kb=900):
     """
@@ -201,11 +203,6 @@ def index():
     """Main capture page"""
     return _render_page('capture.html', CAPTURE_HTML if _HAS_EMBEDDED else None)
 
-@app.route('/review')
-def review():
-    """Supervisor review page"""
-    return _render_page('review.html', REVIEW_HTML if _HAS_EMBEDDED else None)
-
 def check_duplicate_sscc(sscc):
     """Check if SSCC exists in Sheets or local records"""
     if not sscc or not str(sscc).strip():
@@ -214,7 +211,7 @@ def check_duplicate_sscc(sscc):
     if sheets:
         if sheets.sscc_exists(sscc_clean):
             return True
-    records_dir = Path('local_records')
+    records_dir = Path(CONFIG['local_records_dir'])
     if records_dir.exists():
         for json_file in records_dir.glob('record_*.json'):
             try:
@@ -341,7 +338,7 @@ def submit_ticket():
                 result = {'success': False, 'error': str(e)}
         
         # Always save locally
-        records_dir = Path('local_records')
+        records_dir = Path(CONFIG['local_records_dir'])
         record_file = records_dir / f"record_{timestamp.strftime('%Y%m%d_%H%M%S')}.json"
         with open(record_file, 'w') as f:
             json.dump(record, f, indent=2)
@@ -386,7 +383,7 @@ def get_pending():
                 print(f"[ERROR] Sheets error: {e}")
         
         # Also check local records (CAPTURED or legacy PENDING)
-        records_dir = Path('local_records')
+        records_dir = Path(CONFIG['local_records_dir'])
         if records_dir.exists():
             for json_file in records_dir.glob('record_*.json'):
                 try:
@@ -487,24 +484,43 @@ def _parse_report_range():
 
 @app.route('/api/generate-report')
 def generate_report():
-    """Generate PDF report. Uses from_date, from_time, to_date, to_time for custom range (7am-7am default). ?cleanup=1 deletes images older than 7 days."""
+    """Generate PDF report. Uses from_date, from_time, to_date, to_time for custom range. ?days=N or ?all=1 for server-time range."""
     try:
         from report_generator import (
-            get_records_last_24h, get_records_in_range,
+            get_records_last_24h, get_records_last_n_days, get_records_in_range,
             generate_pdf, cleanup_images_older_than_days
         )
-        records_dir = Path('local_records')
+        records_dir = Path(CONFIG['local_records_dir'])
         images_dir = Path(CONFIG['images_folder'])
+        records_dir = records_dir.resolve()
+        images_dir = images_dir.resolve()
 
         filter_by = request.args.get('filter_by', 'capture').lower()
         if filter_by not in ('capture', 'label'):
             filter_by = 'capture'
-        start_end = _parse_report_range()
-        if start_end:
-            start_dt, end_dt = start_end
-            items = get_records_in_range(str(records_dir), str(images_dir), start_dt, end_dt, filter_by=filter_by)
+
+        # ?all=1 or ?days=N: use server time (avoids timezone/form mismatch)
+        days_param = request.args.get('days', '').strip()
+        all_param = request.args.get('all', '').lower() in ('1', 'true', 'yes')
+        if all_param:
+            items = get_records_last_n_days(str(records_dir), str(images_dir), days=365, filter_by=filter_by)
+            start_dt, end_dt = None, None
+        elif days_param.isdigit():
+            items = get_records_last_n_days(str(records_dir), str(images_dir), days=int(days_param), filter_by=filter_by)
+            start_dt, end_dt = None, None
         else:
-            items = get_records_last_24h(str(records_dir), str(images_dir), filter_by=filter_by)
+            start_end = _parse_report_range()
+            if start_end:
+                start_dt, end_dt = start_end
+                items = get_records_in_range(str(records_dir), str(images_dir), start_dt, end_dt, filter_by=filter_by)
+            else:
+                items = get_records_last_24h(str(records_dir), str(images_dir), filter_by=filter_by)
+                start_dt, end_dt = None, None
+
+        # Diagnostics (visible in server logs)
+        n_files = len(list(records_dir.glob('record_*.json'))) if records_dir.exists() else 0
+        print(f"[Report] records_dir={records_dir} exists={records_dir.exists()}, json_files={n_files}, "
+              f"images_dir={images_dir} exists={images_dir.exists()}, items={len(items)}, filter_by={filter_by}")
 
         buf = io.BytesIO()
         generate_pdf(items, buf)
@@ -533,7 +549,7 @@ def auto_report():
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         from report_generator import get_records_last_24h, generate_pdf, send_report_email, cleanup_images_older_than_days
-        records_dir = Path('local_records')
+        records_dir = Path(CONFIG['local_records_dir'])
         images_dir = Path(CONFIG['images_folder'])
         items = get_records_last_24h(str(records_dir), str(images_dir))
         buf = io.BytesIO()
