@@ -11,6 +11,9 @@ import json
 import base64
 import io
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+NZ_TZ = ZoneInfo("Pacific/Auckland")  # NZ Wellington time
 from pathlib import Path
 from PIL import Image
 import numpy as np
@@ -27,7 +30,8 @@ except ImportError as e:
     def upload_to_drive(*a, **kw):
         return None, str(e)
     def get_date_folder_name():
-        return datetime.now().strftime('%Y-%m-%d')
+        now = datetime.now(NZ_TZ)
+        return now.strftime('%Y-%m-%d')
 
 # Use paths relative to this file so templates are found on Render
 _BASE = Path(__file__).resolve().parent
@@ -245,7 +249,7 @@ def submit_ticket():
         except Exception as e:
             return jsonify({'success': False, 'error': f'Invalid image: {e}'}), 400
         
-        timestamp = datetime.now()
+        timestamp = datetime.now(NZ_TZ)  # Capture time in NZ Wellington
         images_dir = Path(CONFIG['images_folder'])
         filename = f"pallet_{timestamp.strftime('%Y%m%d_%H%M%S')}.jpg"
         image_path = images_dir / filename

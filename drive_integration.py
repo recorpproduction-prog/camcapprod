@@ -3,22 +3,24 @@ Google Drive Integration
 Uploads captured images to Drive in date-based folders (7am-7am day blocks).
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+NZ_TZ = ZoneInfo("Pacific/Auckland")  # NZ Wellington time
 from pathlib import Path
 import io
 import os
 
 def get_date_folder_name():
     """
-    Get folder name for current 7am-7am day block.
+    Get folder name for current 7am-7am day block (NZ Wellington time).
     Day runs 7:00 AM to 6:59:59 AM next day.
     E.g. 3am Jan 31 -> Jan 30 folder (still in yesterday's block)
     E.g. 10am Jan 31 -> Jan 31 folder
     """
-    now = datetime.now()
+    now = datetime.now(NZ_TZ)
     if now.hour < 7:
         # Before 7am: we're in the block that started yesterday 7am
-        from datetime import timedelta
         day_start = now.date() - timedelta(days=1)
     else:
         day_start = now.date()
