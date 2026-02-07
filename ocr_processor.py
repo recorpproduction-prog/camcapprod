@@ -57,31 +57,32 @@ class OCRProcessor:
         Process using OCR.space API (FREE - no key required)
         25,000 requests/month free
         """
-        try:
-            with open(image_path, 'rb') as image_file:
-                # OCR.space free API
-                payload = {
-                    'apikey': self.api_key or 'helloworld',  # Default free key
-                    'language': 'eng',
-                    'isOverlayRequired': False,
-                    'detectOrientation': True,
-                    'OCREngine': 2,  # Engine 2 = better for documents/labels
-                    'scale': True,  # Scale image for better recognition
-                }
-                
-                files = {'image': image_file}
-                
-                response = requests.post(
-                    self.ocrspace_url,
-                    files=files,
-                    data=payload,
-                    timeout=30
-                )
-                
+        # OCR.space can be slow; use 90s timeout + retry on transient timeouts
+        timeout = 90
+
+        for attempt in range(3):  # try up to 3 times
+            try:
+                with open(image_path, 'rb') as image_file:
+                    payload = {
+                        'apikey': self.api_key or 'helloworld',
+                        'language': 'eng',
+                        'isOverlayRequired': False,
+                        'detectOrientation': True,
+                        'OCREngine': 2,
+                        'scale': True,
+                    }
+                    files = {'image': image_file}
+
+                    response = requests.post(
+                        self.ocrspace_url,
+                        files=files,
+                        data=payload,
+                        timeout=timeout
+                    )
+
                 result = response.json()
-                
+
                 if result.get('OCRExitCode') == 1:
-                    # Extract text from all parsed results
                     text_parts = []
                     for parsed_result in result.get('ParsedResults', []):
                         text_parts.append(parsed_result.get('ParsedText', ''))
@@ -89,11 +90,17 @@ class OCRProcessor:
                 else:
                     error_message = result.get('ErrorMessage', 'Unknown error')
                     raise Exception(f"OCR.space API error: {error_message}")
-                    
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"OCR.space API request failed: {str(e)}")
-        except Exception as e:
-            raise Exception(f"OCR.space processing failed: {str(e)}")
+
+            except requests.exceptions.Timeout as e:
+                if attempt < 2:
+                    continue  # retry
+                raise Exception(f"OCR.space API request failed: Read timed out after {timeout}s (tried 3 times)")
+            except requests.exceptions.RequestException as e:
+                raise Exception(f"OCR.space API request failed: {str(e)}")
+            except Exception as e:
+                if 'OCR.space API error' in str(e):
+                    raise
+                raise Exception(f"OCR.space processing failed: {str(e)}")
     
     def _process_tesseractspace(self, image_path):
         """
@@ -112,7 +119,7 @@ class OCRProcessor:
                     self.tesseractspace_url,
                     files=files,
                     headers=headers,
-                    timeout=30
+                    timeout=90
                 )
                 
                 if response.status_code == 200:
@@ -155,7 +162,7 @@ class OCRProcessor:
             response = requests.post(
                 url,
                 json=request_data,
-                timeout=30
+                timeout=90
             )
             
             if response.status_code == 200:
