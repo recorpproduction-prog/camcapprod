@@ -94,7 +94,7 @@ CAPTURE_HTML = r'''<!DOCTYPE html>
     <script>
     var video,canvas,stream,isRunning=false,isProcessing=false,availableCameras=[],captureState='ready',stableFrameCount=0,exitFrameCount=0,prevFramePixels=null,testMode=false;
     var SHARPNESS_THRESHOLD=50,STABLE_FRAMES_NEEDED=5,EXIT_FRAMES_NEEDED=6,MOTION_THRESHOLD=15;
-    window.addEventListener('DOMContentLoaded',function(){video=document.getElementById('video');canvas=document.getElementById('canvas');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Camera not supported');return;}navigator.mediaDevices.enumerateDevices().then(function(d){var v=d.filter(function(x){return x.kind==='videoinput';});var s=document.getElementById('cameraSelect');s.innerHTML='';v.forEach(function(dev,i){var o=document.createElement('option');o.value=dev.deviceId;o.textContent=dev.label||'Camera '+(i+1);s.appendChild(o);});});testMode=localStorage.getItem('palletTestMode')==='true';updateTestModeBtn();loadDiagnostics();});
+    window.addEventListener('DOMContentLoaded',function(){video=document.getElementById('video');canvas=document.getElementById('canvas');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('Camera not supported');return;}navigator.mediaDevices.enumerateDevices().then(function(d){var v=d.filter(function(x){return x.kind==='videoinput';});var s=document.getElementById('cameraSelect');s.innerHTML='';v.forEach(function(dev,i){var o=document.createElement('option');o.value=dev.deviceId;o.textContent=dev.label||'Camera '+(i+1);s.appendChild(o);});});testMode=localStorage.getItem('palletTestMode')==='true';updateTestModeBtn();loadDiagnostics();setTimeout(startCamera,800);});
 function loadDiagnostics(){var el=document.getElementById('processLog');if(!el)return;el.textContent='Fetching...\n';fetch('/api/diagnostics').then(function(r){if(!r.ok)throw new Error(r.status);return r.json();}).then(function(d){var t='--- System Status ---\n';t+='OCR: '+(d.ocr_ready?'YES':'NO')+'\n';t+='Sheets connected: '+(d.sheets_connected?'YES':'NO')+'\n';t+='Sheets ID set: '+(d.sheets_id_set?'YES':'NO')+'\n';t+='Drive creds: '+(d.drive_creds_available?'YES':'NO')+'\n';t+='Drive folder ID: '+(d.drive_root_folder_id_set?'YES':'NO')+'\n';t+='---\nAfter capture, process details appear here.';el.textContent=t;}).catch(function(e){el.textContent='Diagnostics failed: '+e.message;});}
     function toggleTestMode(){testMode=!testMode;localStorage.setItem('palletTestMode',testMode);updateTestModeBtn();}
     function updateTestModeBtn(){var b=document.getElementById('testModeBtn');if(b){b.textContent=testMode?'Test Mode: ON':'Test Mode: OFF';b.classList.toggle('test-mode-on',testMode);}}
@@ -197,7 +197,7 @@ REPORT_HTML = r'''<!DOCTYPE html>
 <body>
     <div class="header"><h1>Daily Compliance Report</h1><p>Summary first (pallets, quantity) then images. Reports run Tue-Fri 7am. Each report covers 7am-7am (24h). Images kept 7 days.</p></div>
     <div class="section">
-        <p>Generate a PDF report. Choose the date and time range, or use the default (last 7am-7am block).</p>
+        <p>Generate a PDF report. Default is the current 7am–7am 24hr block. Adjust if needed.</p>
         <div class="report-range">
             <div class="range-group"><label for="fromDate">Start date</label><input type="date" id="fromDate"></div>
             <div class="range-group"><label for="fromTime">Start time</label><input type="time" id="fromTime" value="07:00"></div>
@@ -210,8 +210,9 @@ REPORT_HTML = r'''<!DOCTYPE html>
         <div class="note"><strong>Compliance:</strong> Download the PDF first. Reports use 7am-7am blocks. Auto-reports run Tue-Fri at 7am. Images older than 7 days are removed when you use "Clean Up".</div>
     </div>
     <script>
-    (function(){var n=new Date(),t=n.toISOString().slice(0,10),y=new Date(n);y.setDate(y.getDate()-1);var ys=y.toISOString().slice(0,10);
-    document.getElementById('fromDate').value=ys;document.getElementById('toDate').value=t;
+    (function(){var n=new Date(),sd=new Date(n),ed=new Date(n);if(n.getHours()>=7)ed.setDate(ed.getDate()+1);else sd.setDate(sd.getDate()-1);sd.setHours(7,0,0,0);ed.setHours(7,0,0,0);
+    document.getElementById('fromDate').value=sd.toISOString().slice(0,10);document.getElementById('fromTime').value='07:00';
+    document.getElementById('toDate').value=ed.toISOString().slice(0,10);document.getElementById('toTime').value='07:00';
     function buildUrl(cleanup){var fd=document.getElementById('fromDate').value,ft=document.getElementById('fromTime').value,td=document.getElementById('toDate').value,tt=document.getElementById('toTime').value;var u='/api/generate-report?from_date='+encodeURIComponent(fd)+'&from_time='+encodeURIComponent(ft)+'&to_date='+encodeURIComponent(td)+'&to_time='+encodeURIComponent(tt);if(cleanup)u+='&cleanup=1';return u;}
     function up(){document.getElementById('generateLink').href=buildUrl(false);document.getElementById('cleanupLink').href=buildUrl(true);}
     ['fromDate','fromTime','toDate','toTime'].forEach(function(id){document.getElementById(id).addEventListener('change',up);});up();})();
