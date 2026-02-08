@@ -368,6 +368,7 @@ def submit_ticket():
             'image_path': display_url,
             'image_drive_url': image_drive_url or '',
             'raw_ocr_text': ocr_text,
+            'test_mode': test_mode,  # Mark so list/report can show TEST badge
             **parsed_data['parsed']
         }
         
@@ -379,6 +380,8 @@ def submit_ticket():
         
         if confidence_notes:
             record['notes'] = ' | Confidence: ' + ', '.join(confidence_notes)
+        if test_mode:
+            record['notes'] = (record.get('notes') or '') + ' | TEST MODE'
         
         # Duplication check (skip if test_mode)
         sscc_val = record.get('sscc', '')
@@ -436,17 +439,24 @@ def submit_ticket():
             pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def _is_full_label(r):
+    """True if record has SSCC - incomplete/bad captures lack this key field."""
+    return bool(str(r.get('sscc') or '').strip())
+
+
 def _record_key(r):
-    """Unique key for dedup: SSCC if present, else timestamp."""
-    sscc = (r.get('sscc') or '').strip()
-    if sscc:
-        return ('sscc', sscc)
-    return ('ts', r.get('timestamp', ''))
+    """Unique key for dedup: timestamp (each capture is unique). Use timestamp so test-mode allows multiple captures of same SSCC."""
+    ts = r.get('timestamp', '')
+    # Fallback for records without timestamp (e.g. SSCC-only match when same record in Sheets+local)
+    if not ts:
+        sscc = (r.get('sscc') or '').strip()
+        return ('sscc', sscc) if sscc else ('rand', id(r))
+    return ('ts', ts[:26])  # Normalize to avoid timezone format variations
 
 
 @app.route('/api/pending', methods=['GET'])
 def get_pending():
-    """Get pending records - merge local (prioritized) with Sheets, dedupe by SSCC or timestamp."""
+    """Get pending records - merge local (prioritized) with Sheets, dedupe by timestamp (so test-mode shows all captures)."""
     try:
         seen = {}
         records = []
@@ -459,7 +469,7 @@ def get_pending():
                     with open(json_file, 'r') as f:
                         record = json.load(f)
                         st = record.get('status', '')
-                        if st in ('CAPTURED', 'PENDING'):
+                        if st in ('CAPTURED', 'PENDING') and _is_full_label(record):
                             k = _record_key(record)
                             if k not in seen:
                                 seen[k] = len(records)
@@ -471,6 +481,8 @@ def get_pending():
         if sheets:
             try:
                 for record in sheets.get_pending_records():
+                    if not _is_full_label(record):
+                        continue
                     k = _record_key(record)
                     if k not in seen:
                         seen[k] = len(records)

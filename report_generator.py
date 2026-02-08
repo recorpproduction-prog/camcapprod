@@ -128,6 +128,9 @@ def get_records_in_range(local_records_dir, images_dir, start_dt, end_dt, filter
                         continue
                 if dt < start_dt or dt >= end_dt:
                     continue
+                # Only include full labels (have SSCC) - skip bad/incomplete captures
+                if not str(rec.get('sscc') or '').strip():
+                    continue
                 local_path = _resolve_image_path(rec, images_dir, record_filename=f.name)
                 results.append({"record": rec, "image_path": local_path})
             except Exception:
@@ -381,8 +384,9 @@ def generate_pdf(records_with_images, output_buffer):
         y_start = y
         ts_raw = rec.get("timestamp", "")
         ts_display = ts_raw[:19] if ts_raw and len(ts_raw) > 19 else (ts_raw or "N/A")
+        test_label = " (TEST MODE)" if rec.get("test_mode") else ""
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, f"#{i+1} - Captured: {ts_display}")
+        c.drawString(margin, y, f"#{i+1} - Captured: {ts_display}{test_label}")
         y -= line_height
 
         fields = [
