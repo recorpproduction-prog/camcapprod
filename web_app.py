@@ -46,7 +46,15 @@ except ImportError:
     REPORT_HTML = None
 CORS(app)
 
-# Return JSON for 500 errors so we can see the actual error message
+# Return JSON for errors so API clients don't get HTML (which causes "Unexpected token '<'" when parsing as JSON)
+@app.errorhandler(404)
+def handle_404(err):
+    return jsonify({'error': 'Not found', 'message': 'The requested resource was not found'}), 404
+
+@app.errorhandler(405)
+def handle_405(err):
+    return jsonify({'error': 'Method not allowed', 'message': str(err)}), 405
+
 @app.errorhandler(500)
 def handle_500(err):
     import traceback
