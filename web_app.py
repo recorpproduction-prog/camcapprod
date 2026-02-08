@@ -444,6 +444,51 @@ def _is_full_label(r):
     return bool(str(r.get('sscc') or '').strip())
 
 
+def _parse_record_ts(ts):
+    """Parse record timestamp to naive NZ datetime for comparison."""
+    if not ts:
+        return None
+    try:
+        s = str(ts).strip()
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.astimezone(NZ_TZ).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
+
+def _in_last_24h(r):
+    """True if record's capture timestamp is within last 24 hours (NZ time)."""
+    dt = _parse_record_ts(r.get('timestamp', ''))
+    if not dt:
+        return False
+    now = datetime.now(NZ_TZ).replace(tzinfo=None)
+    return dt >= (now - timedelta(hours=24))
+
+
+def _resolve_report_image(rec, images_dir):
+    """Get local image path for report; None if not found (e.g. Drive-only)."""
+    from pathlib import Path
+    img_dir = Path(images_dir)
+    if not img_dir.exists():
+        return None
+    img_path = rec.get("image_path", "")
+    if img_path and not img_path.startswith("http"):
+        cand = img_dir / Path(img_path).name
+        if cand.exists():
+            return str(cand)
+    ts = rec.get("timestamp", "")
+    dt = _parse_record_ts(ts)
+    if dt:
+        base = "pallet_" + dt.strftime("%Y%m%d_%H%M%S")
+        for ext in (".jpg", ".jpeg", ".png"):
+            cand = img_dir / (base + ext)
+            if cand.exists():
+                return str(cand)
+    return None
+
+
 def _record_key(r):
     """Unique key for dedup: timestamp (each capture is unique). Use timestamp so test-mode allows multiple captures of same SSCC."""
     ts = r.get('timestamp', '')
@@ -469,7 +514,7 @@ def get_pending():
                     with open(json_file, 'r') as f:
                         record = json.load(f)
                         st = record.get('status', '')
-                        if st in ('CAPTURED', 'PENDING') and _is_full_label(record):
+                        if st in ('CAPTURED', 'PENDING') and _is_full_label(record) and _in_last_24h(record):
                             k = _record_key(record)
                             if k not in seen:
                                 seen[k] = len(records)
@@ -481,7 +526,7 @@ def get_pending():
         if sheets:
             try:
                 for record in sheets.get_pending_records():
-                    if not _is_full_label(record):
+                    if not _is_full_label(record) or not _in_last_24h(record):
                         continue
                     k = _record_key(record)
                     if k not in seen:
@@ -616,6 +661,20 @@ def generate_report():
             else:
                 items = get_records_last_24h(str(records_dir), str(images_dir), filter_by=filter_by)
                 start_dt, end_dt = None, None
+
+        # Fallback: if local returns nothing and Sheets has data, use Sheets for last 24h
+        if len(items) == 0 and sheets:
+            try:
+                for rec in sheets.get_pending_records():
+                    if not _is_full_label(rec) or not _in_last_24h(rec):
+                        continue
+                    img_path = _resolve_report_image(rec, str(images_dir))
+                    items.append({"record": rec, "image_path": img_path})
+                if items:
+                    items.sort(key=lambda x: (x["record"].get("timestamp") or "")[:26], reverse=True)
+                    _log(f"[Report] Using {len(items)} records from Sheets (local empty)")
+            except Exception as e:
+                _log(f"[Report] Sheets fallback error: {e}")
 
         # Diagnostics (visible in server logs)
         n_files = len(list(records_dir.glob('record_*.json'))) if records_dir.exists() else 0

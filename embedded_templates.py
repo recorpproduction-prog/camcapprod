@@ -225,6 +225,7 @@ REPORT_HTML = r'''<!DOCTYPE html>
             <div class="range-group"><label for="toTime">End time</label><input type="time" id="toTime" value="07:00"></div>
         </div>
         <a href="/api/generate-report" class="btn btn-primary" id="generateLink" download>Generate PDF Report</a>
+        <a href="/api/generate-report?filter_by=capture" class="btn btn-primary" download style="background:#1976D2;">Quick: Last 24h (NZ)</a>
         <a href="#" class="btn btn-cleanup" id="cleanupLink" onclick="return confirm('Generate report AND delete images older than 7 days?');">Generate + Clean Up Old Images</a>
         <p style="margin-top:12px;font-size:13px;color:#666;">Report empty? Try: <a href="/api/generate-report?days=7&filter_by=capture" download>Last 7 days (server)</a> · <a href="/api/generate-report?all=1&filter_by=capture" download>Include all</a></p>
         <a href="/" class="btn btn-back">Back to Capture</a>
