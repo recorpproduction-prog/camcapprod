@@ -37,6 +37,9 @@ except ImportError as e:
 _BASE = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder=str(_BASE / 'static'), template_folder=str(_BASE / 'templates'))
 
+# Report config file (emails for auto-report) - under data/ so it can persist
+_REPORT_CONFIG_PATH = _BASE / 'data' / 'report_config.json'
+
 # Embedded templates - used when templates/ folder is not deployed (e.g. missing from repo)
 try:
     from embedded_templates import CAPTURE_HTML, REVIEW_HTML, REPORT_HTML
@@ -97,6 +100,28 @@ def _log(msg):
         sys.stdout.flush()
     except Exception:
         pass
+
+
+def _get_report_emails():
+    """Get report recipient emails: from config file first, else CONFIG env."""
+    try:
+        if _REPORT_CONFIG_PATH.exists():
+            with open(_REPORT_CONFIG_PATH, 'r') as f:
+                data = json.load(f)
+                emails = data.get('report_emails', [])
+                if isinstance(emails, list) and emails:
+                    return [str(e).strip() for e in emails if str(e).strip()]
+    except Exception:
+        pass
+    raw = CONFIG.get('report_email_to', '') or ''
+    return [e.strip() for e in raw.split(',') if e.strip()]
+
+
+def _save_report_emails(emails):
+    """Save report emails to config file."""
+    _REPORT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(_REPORT_CONFIG_PATH, 'w') as f:
+        json.dump({'report_emails': list(emails)}, f, indent=2)
 
 
 def init_components():
@@ -602,6 +627,58 @@ def report_page():
     """Daily report page - generate PDF with images"""
     return _render_page('report.html', REPORT_HTML if _HAS_EMBEDDED else None)
 
+
+@app.route('/config')
+def config_page():
+    """Settings / config page - report emails, etc."""
+    try:
+        return render_template('config.html')
+    except TemplateNotFound:
+        return _render_config_fallback()
+
+
+def _render_config_fallback():
+    """Simple config page when templates/ not deployed."""
+    html = '''<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Settings</title>
+    <style>body{font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px;}h1{color:#1976D2;}
+    label{display:block;margin-top:16px;font-weight:bold;}textarea{width:100%;height:120px;padding:8px;}
+    button{background:#1976D2;color:#fff;border:none;padding:12px 24px;margin-top:12px;cursor:pointer;border-radius:6px;}
+    .msg{margin-top:16px;padding:12px;border-radius:6px;}.ok{background:#E8F5E9;color:#2E7D32;}.err{background:#FFEBEE;color:#C62828;}
+    a{color:#1976D2;}</style></head><body>
+    <h1>Settings</h1><p><a href="/">← Back to Capture</a></p>
+    <h2>Report emails (auto-report)</h2><p>One email per line. Used when the daily report is sent (e.g. via cron).</p>
+    <label>Emails:</label><textarea id="emails" placeholder="email1@example.com\nemail2@example.com"></textarea>
+    <button onclick="save()">Save</button><div id="msg"></div>
+    <script>
+    fetch('/api/config/report-emails').then(r=>r.json()).then(d=>{document.getElementById('emails').value=(d.report_emails||[]).join('\\n');}).catch(()=>{});
+    function save(){var emails=document.getElementById('emails').value.split(/[\\n,]+').map(e=>e.trim()).filter(Boolean);
+    fetch('/api/config/report-emails',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({report_emails:emails})})
+    .then(r=>r.json()).then(d=>{var m=document.getElementById('msg');m.className='msg '+(d.success?'ok':'err');m.textContent=d.success?'Saved.':(d.error||'Failed');}).catch(e=>{document.getElementById('msg').className='msg err';document.getElementById('msg').textContent=e.message;});
+    }</script></body></html>'''
+    return render_template_string(html)
+
+
+@app.route('/api/config/report-emails', methods=['GET'])
+def get_report_emails():
+    """Get list of report recipient emails."""
+    return jsonify({'report_emails': _get_report_emails()})
+
+
+@app.route('/api/config/report-emails', methods=['POST'])
+def set_report_emails():
+    """Save report recipient emails (JSON body: { report_emails: [...] })."""
+    try:
+        data = request.get_json() or {}
+        emails = data.get('report_emails', [])
+        if isinstance(emails, str):
+            emails = [e.strip() for e in emails.replace(',', '\n').split() if e.strip()]
+        else:
+            emails = [str(e).strip() for e in emails if str(e).strip()]
+        _save_report_emails(emails)
+        return jsonify({'success': True, 'report_emails': emails})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 def _parse_report_range():
     """Parse from_date, from_time, to_date, to_time from query params. Returns (start_dt, end_dt) or None for default."""
     from report_generator import get_7am_7am_window
@@ -710,10 +787,10 @@ def generate_report():
 
 @app.route('/api/auto-report')
 def auto_report():
-    """Generate PDF report (7am-7am window), email it, optionally clean up. Call Tue-Fri 7am via cron."""
+    """Generate PDF (last 24h), email to configured addresses, optionally clean up old images. Call via cron Tue-Fri 7am."""
     secret = request.args.get('secret')
     if CONFIG.get('report_secret') and secret != CONFIG['report_secret']:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
     try:
         from report_generator import get_records_last_24h, generate_pdf, send_report_email, cleanup_images_older_than_days
         records_dir = Path(CONFIG['local_records_dir'])
@@ -724,9 +801,15 @@ def auto_report():
         buf.seek(0)
         pdf_bytes = buf.getvalue()
 
-        to_emails = CONFIG.get('report_email_to', '').strip()
+        to_emails = _get_report_emails()
         if not to_emails:
-            to_emails = 'recropproduction@gmail.com'
+            return jsonify({
+                'success': False,
+                'error': 'No report emails configured. Add emails in Settings → Report emails.',
+                'pdf_generated': True,
+                'records': len(items),
+            }), 400
+
         success, err = send_report_email(
             pdf_bytes, to_emails,
             smtp_host=CONFIG.get('smtp_host'),
@@ -735,23 +818,29 @@ def auto_report():
             smtp_password=CONFIG.get('smtp_password'),
         )
         if not success:
-            return jsonify({'error': f'Email failed: {err}', 'pdf_generated': True}), 500
+            return jsonify({
+                'success': False,
+                'error': f'Email failed: {err}',
+                'pdf_generated': True,
+                'records': len(items),
+            }), 500
 
         do_cleanup = request.args.get('cleanup', '1').lower() in ('1', 'true', 'yes')
         deleted = 0
         if do_cleanup:
             deleted = cleanup_images_older_than_days(str(images_dir), days=7)
-        emails_list = [e.strip() for e in to_emails.split(',')] if isinstance(to_emails, str) else to_emails
+
         return jsonify({
             'success': True,
+            'message': f'Report sent to {len(to_emails)} recipient(s).',
             'records': len(items),
-            'emailed_to': emails_list,
+            'emailed_to': to_emails,
             'images_cleaned': deleted,
         })
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     import webbrowser

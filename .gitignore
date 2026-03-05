@@ -12,6 +12,7 @@ env/
 
 # Local data
 local_records/
+data/
 static/captured_images/
 captured_images/
 

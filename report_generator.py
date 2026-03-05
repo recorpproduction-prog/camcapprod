@@ -251,6 +251,39 @@ def _group_by_batch(records_with_images):
     return sorted(by_batch.items(), key=lambda x: x[0])
 
 
+def _wrap_text(c, text, max_width_pt, font="Helvetica", size=9):
+    """Split text into lines that fit max_width_pt. Returns list of strings."""
+    if not text:
+        return []
+    c.setFont(font, size)
+    words = str(text).split()
+    lines = []
+    current = []
+    for w in words:
+        test = " ".join(current + [w]) if current else w
+        if c.stringWidth(test, font, size) <= max_width_pt:
+            current.append(w)
+        else:
+            if current:
+                lines.append(" ".join(current))
+                current = []
+            while w and c.stringWidth(w, font, size) > max_width_pt:
+                n = len(w)
+                for i in range(n, 0, -1):
+                    if c.stringWidth(w[:i], font, size) <= max_width_pt:
+                        lines.append(w[:i])
+                        w = w[i:]
+                        break
+                else:
+                    lines.append(w[:1])
+                    w = w[1:]
+            if w:
+                current = [w]
+    if current:
+        lines.append(" ".join(current))
+    return lines
+
+
 def generate_pdf(records_with_images, output_buffer):
     """Generate PDF: Page 1 = Summary, then detail pages with images."""
     try:
@@ -295,22 +328,25 @@ def generate_pdf(records_with_images, output_buffer):
     y -= line_height
     c.setFont("Helvetica", 10)
     shift_totals = _compute_shift_totals(records_with_images)
+    tot_line_width = page_w - margin * 2
     for batch_id, data in shift_totals:
         batch_str = str(batch_id)[:25]
         qty_str = str(data["qty"])
-        desc_str = (data.get("desc") or "")[:45]
-        if len(desc_str) > 45:
-            desc_str = desc_str[:42] + "..."
-        c.drawString(margin, y, f"Batch {batch_str}  |  Total: {qty_str}  |  {desc_str}")
-        y -= line_height
+        desc = (data.get("desc") or "").strip()
+        full_line = f"Batch {batch_str}  |  Total: {qty_str}  |  {desc}" if desc else f"Batch {batch_str}  |  Total: {qty_str}"
+        lines = _wrap_text(c, full_line, tot_line_width, font="Helvetica", size=10)
+        for ln in lines:
+            c.drawString(margin, y, ln)
+            y -= line_height
+        y -= line_height * 0.3
         if y < margin + line_height * 3:
             c.showPage()
             y = page_h - margin
     c.showPage()
 
-    # --- ONE PAGE PER BATCH: handwritten #, SSCC, quantity, running total (after totals) ---
-    # Column offsets (mm from margin) - spaced to avoid text overlap
-    off_hw, off_sscc, off_qty, off_total = 30, 60, 115, 135
+    # --- ONE PAGE PER BATCH: handwritten #, SSCC, item description, quantity, running total ---
+    off_hw, off_sscc, off_item, off_qty, off_total = 30, 60, 95, 155, 175
+    item_col_width_pt = (off_qty - off_item) * mm
     batches = _group_by_batch(records_with_images)
     for batch_id, batch_items in batches:
         c.setFont("Helvetica-Bold", 14)
@@ -320,6 +356,7 @@ def generate_pdf(records_with_images, output_buffer):
         c.drawString(margin, y, "Batch")
         c.drawString(margin + off_hw * mm, y, "Handwritten #")
         c.drawString(margin + off_sscc * mm, y, "SSCC")
+        c.drawString(margin + off_item * mm, y, "Item")
         c.drawString(margin + off_qty * mm, y, "Qty")
         c.drawString(margin + off_total * mm, y, "Running")
         y -= line_height
@@ -333,6 +370,7 @@ def generate_pdf(records_with_images, output_buffer):
             rec = item["record"]
             hw = str(rec.get("handwritten_number") or "")[:10]
             sscc = str(rec.get("sscc") or "")[:22]
+            desc = (rec.get("item_description") or "").strip()
             qty = 0
             try:
                 q = rec.get("quantity")
@@ -341,11 +379,17 @@ def generate_pdf(records_with_images, output_buffer):
             except (ValueError, TypeError):
                 pass
             running += qty
-            c.drawString(margin, y, str(batch_id)[:10])
-            c.drawString(margin + off_hw * mm, y, hw)
-            c.drawString(margin + off_sscc * mm, y, sscc)
-            c.drawString(margin + off_qty * mm, y, str(qty))
-            c.drawString(margin + off_total * mm, y, str(running))
+            row_y = y
+            c.drawString(margin, row_y, str(batch_id)[:10])
+            c.drawString(margin + off_hw * mm, row_y, hw)
+            c.drawString(margin + off_sscc * mm, row_y, sscc)
+            c.drawString(margin + off_qty * mm, row_y, str(qty))
+            c.drawString(margin + off_total * mm, row_y, str(running))
+            if desc:
+                lines = _wrap_text(c, desc, item_col_width_pt, font="Helvetica", size=9)
+                for j, ln in enumerate(lines):
+                    c.drawString(margin + off_item * mm, row_y - j * line_height, ln)
+                y -= line_height * len(lines)
             y -= line_height
             if y < margin + line_height * 2:
                 c.showPage()
@@ -389,6 +433,7 @@ def generate_pdf(records_with_images, output_buffer):
         c.drawString(margin, y, f"#{i+1} - Captured: {ts_display}{test_label}")
         y -= line_height
 
+        text_col_width_pt = text_col_width * 2.835
         fields = [
             ("sscc", "sscc"),
             ("item_number", "item_number"),
@@ -403,12 +448,17 @@ def generate_pdf(records_with_images, output_buffer):
         for label, key in fields:
             v = rec.get(key, "")
             if v:
-                # Truncate to fit 75mm text column (~38 chars at 9pt) to avoid overlap with image
                 text = f"{label}: {str(v)}"
-                if len(text) > 38:
-                    text = text[:35] + "..."
-                c.drawString(margin, y, text)
-                y -= line_height
+                if key == "item_description":
+                    lines = _wrap_text(c, text, text_col_width_pt - 20, font="Helvetica", size=9)
+                    for ln in lines:
+                        c.drawString(margin, y, ln)
+                        y -= line_height
+                else:
+                    if len(text) > 38:
+                        text = text[:35] + "..."
+                    c.drawString(margin, y, text)
+                    y -= line_height
         y -= line_height
 
         # Right column: image

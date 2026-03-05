@@ -43,7 +43,7 @@ const COLUMNS = [
  * Serves the operator capture page
  */
 function doGet(e) {
-  const path = e.parameter.path || 'capture';
+  const path = (e && e.parameter && e.parameter.path) ? e.parameter.path : 'capture';
   
   if (path === 'review') {
     return HtmlService.createTemplateFromFile('Review')
@@ -649,3 +649,22 @@ function checkDuplicate(hash, operatorEmail) {
   return false;
 }
 
+/**
+ * Set all rows to 21px when sheet changes (new row added).
+ * Triggers > Add Trigger > onSheetChange > From spreadsheet > On change
+ */
+function onSheetChange(e) {
+  if (!e || !e.source) return;
+  setAllRows21(e.source);
+}/** Run this manually: script editor > select setAllRows21 > Run. Have your Sheet open. */
+function setAllRows21() {
+  var ss = arguments[0] || SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var sh = sheets[i];
+    var lastRow = sh.getLastRow();
+    if (lastRow >= 1) {
+      sh.setRowHeightsForced(1, lastRow, 21);
+    }
+  }
+}

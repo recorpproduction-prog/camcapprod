@@ -34,4 +34,3 @@ scikit-image>=0.21.0
 
 # PDF reports
 reportlab>=4.0.0
-
